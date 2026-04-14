@@ -1,0 +1,163 @@
+---
+description: Analyzes source code and generates Mermaid diagrams (class, sequence, component, architecture). Works for Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust. Usage: /code-diagram <path> [class|sequence|component|arch|all] [full|split]
+---
+
+You are a code analysis expert. Analyze real source code and generate accurate Mermaid diagrams. Never guess or invent — every element must come directly from the code.
+
+## Arguments
+
+Parse the user's input:
+- If empty → print: `"Usage: /code-diagram <path> [class|sequence|component|arch|all] [full|split]"` and stop.
+- First token → `TARGET_PATH` (directory or file). Required.
+- Second token (optional):
+  - If `full` or `split` → treat as `FLOW_MODE`, default `DIAGRAM_TYPE` to `all`
+  - If `class`, `sequence`, `component`, `arch`, or `all` → treat as `DIAGRAM_TYPE`
+  - Otherwise → error: `"Unknown diagram type: '<value>'."`
+- Third token (optional) → `FLOW_MODE`: `full` or `split`. Default: `full`
+
+FLOW_MODE behavior:
+
+| Diagram | `full` (default) | `split` |
+|---|---|---|
+| `sequence` | One unified diagram, rect sections | One per flow |
+| `class` | One unified diagram | One per layer |
+| `arch` | One unified diagram | One per subsystem |
+| `component` | Always one | Always one |
+
+### Single-file mode
+If TARGET_PATH is a single file: read it directly, skip directory scanning, note that cross-file relationships are not shown.
+
+## Global read budget
+
+**MAX_FULL_READS = 20.** Shared pool. Use shell `cat` for reads, `rg` (ripgrep) for search. Grep is free; reads are expensive.
+
+## PHASE 1 — Discovery
+
+Find source files using shell:
+```bash
+find $TARGET_PATH -type f \( -name "*.dart" -o -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.py" -o -name "*.kt" -o -name "*.java" -o -name "*.go" -o -name "*.swift" -o -name "*.rs" -o -name "*.svelte" \) \
+  ! -name "*.g.dart" ! -name "*.freezed.dart" ! -name "*.d.ts" ! -name "*.generated.ts" \
+  ! -name "*_test.dart" ! -name "*.spec.ts" ! -name "*.test.ts" ! -name "*.test.js" ! -name "*_test.go" ! -name "*_test.py" ! -name "*Test.java" ! -name "*Tests.swift" \
+  ! -name "*.pb.go" ! -name "*_mock.go" ! -name "*_pb2.py" ! -name "*.arb" \
+  ! -path "*/build/*" ! -path "*/node_modules/*" ! -path "*/__pycache__/*" ! -path "*/dist/*" ! -path "*/.gradle/*" ! -path "*/vendor/*" ! -path "*/target/*"
+```
+
+Detect language from dominant extension. Print directory tree with file counts.
+
+### Auto-decompose (100+ files)
+Split by top-level subdirectories. Each gets proportional read budget (min 2, total <= 20). Generate integration diagram at end. If < 2 subdirectories: fall back to grep-first strategy.
+
+## PHASE 1.5 — Paradigm Detection
+
+Run 3 probes with `rg -c`:
+```bash
+rg -c '(abstract\s+)?(class|interface)\s+\w+' $TARGET_PATH          # OOP
+rg -c "from\s+['\"]react['\"]|@Component\(|extends\s+StatelessWidget" $TARGET_PATH  # Component
+rg -c '^(def\s+\w+|func\s+\w+|fn\s+\w+|export\s+function)' $TARGET_PATH  # Functional
+```
+
+Classification (first match wins):
+1. Component 3+ AND OOP 5+ → **Mixed** (run Strategy A + B)
+2. Component 3+ → **Component-based** (Strategy B)
+3. OOP 5+ AND > 2x functional → **OOP** (Strategy A)
+4. Functional 5+ AND > 2x OOP → **Functional** (Strategy C)
+5. Ambiguous → **Mixed** (Strategy A + C)
+
+## PHASE 2 — Grep Scan
+
+Use `rg` for all searches. Never read files until Phase 3.
+
+### STRATEGY A — OOP (2 batched passes)
+
+**Pass 1 — Structure:**
+```
+DART:    rg '^\s*(abstract\s+)?(class|mixin|enum)\s+\w+' $TARGET_PATH
+TS/JS:   rg '(export\s+)?(abstract\s+)?(class|interface)\s+\w+' $TARGET_PATH
+PYTHON:  rg '^class\s+\w+' $TARGET_PATH
+JAVA/KT: rg '(abstract\s+|data\s+|sealed\s+)?(class|interface|object)\s+\w+' $TARGET_PATH
+GO:      rg '^type\s+\w+\s+(struct|interface)|^func\s+\(\w+\s+\*?\w+\)\s+\w+' $TARGET_PATH
+SWIFT:   rg '(class|struct|protocol|enum)\s+\w+' $TARGET_PATH
+RUST:    rg '(pub\s+)?(struct|enum|trait)\s+\w+|impl(\s+\w+)?\s+for\s+\w+' $TARGET_PATH
+```
+Note: Do NOT match TypeScript `type` aliases — only `class` and `interface`.
+
+**Pass 2 — Dependencies** (imports, HTTP, endpoints, DI per language — same patterns as Pass 1 structure but targeting import/HTTP/DI patterns).
+
+### STRATEGY B — Component-Based (2 passes)
+
+**Pass 1:** Components (`(export\s+)?(function|const)\s+[A-Z]\w+`), JSX (`<[A-Z]\w+[\s/>]`), Props.
+**Pass 2:** Hooks (`use[A-Z]\w+\s*\(`), API calls, state management, routing.
+Vue: add `ref|reactive|computed|defineProps`. Angular: add `@Input|@Output|@Injectable`.
+
+### STRATEGY C — Functional (2 passes)
+
+**Pass 1:** Function declarations per language.
+**Pass 2:** HTTP route handlers, relative imports.
+
+### Build inventory
+OOP: class list, relationships, API calls, deps, DI.
+Component: component list, render tree, hooks, API calls, state.
+Functional: function list, module deps, route map.
+
+## PHASE 2.5 — Structural Importance Scoring
+
+**TIER 1 (must read):** abstract class/protocol/trait, extended by 3+ files, imported by 5+ files, generic + extended.
+Use language-specific import patterns to count frequency:
+```
+DART: rg "^import\s+['\"]package:" | count per file
+TS:   rg "^import.*from\s+['\"]" | count per file
+PY:   rg '^(from|import)\s+' | count per file
+GO:   rg '^\s+"[\w./-]+"' | count per file
+```
+Barrel guard: `index.ts` with only re-exports → Tier 3.
+
+**TIER 2:** DI registries, entry points, 2+ relationships.
+**TIER 3:** Everything else.
+
+Cross-boundary: search up to 2 levels above TARGET_PATH for missing Tier 1 classes.
+
+## PHASE 3 — File Reading
+
+Use `cat` for reads. Track against MAX_FULL_READS = 20.
+
+- **class**: Tier 1 + DI registries (5-10 reads)
+- **sequence**: Tier 1 + depth-first chain trace (8-15 reads)
+- **component/arch**: Zero reads. Do NOT read Tier 1 — grep is sufficient.
+- **all**: Class + sequence reads combined (10-18 reads)
+
+## PHASE 4 — Diagram Generation
+
+### Mermaid guardrails
+- `%%{init: {'theme': 'dark'}}%%` as first line of EVERY diagram
+- No `<br/>`, no HTML in participant labels. Short aliases, max 30 chars.
+- Sequence `rect`: `rgba(255, 255, 255, 0.1)` and `0.05` alternating
+- `autonumber` is cumulative (doesn't reset in rects)
+- Prefer `%% --- Layer ---` over `namespace`
+- Every diagram in fenced ```mermaid block. No prose inside fence.
+
+### class
+- **OOP full:** `classDiagram`, stereotypes, 3-5 fields/methods, layer comments
+- **OOP split:** One diagram per layer (data/domain/presentation/core)
+- **Component:** `graph TB` component tree
+- **Functional:** `graph LR` module map
+
+### sequence
+- **full:** Single diagram, `rect` blocks per flow with `Note over` labels
+- **split:** One diagram per flow with own participants
+- 60+ interactions → recommend split mode
+
+### component
+- `graph LR` — internal rectangles, external rounded. Edge labels. Always one diagram.
+
+### arch
+- **full:** `graph TB` with subgraph per layer. Flag violations.
+- **split:** One per subsystem + integration diagram.
+
+## PHASE 5 — Insights
+
+Bullet points: paradigm + confidence, entity count, external deps, read budget usage, hotspots, violations.
+
+## Guardrails
+- Never invent entities. Never exceed 20 reads. 30 nodes max per diagram.
+- Never apply OOP patterns to component/functional codebases.
+- Skip empty diagrams with explanation.

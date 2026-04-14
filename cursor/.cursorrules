@@ -1,0 +1,177 @@
+# Code Diagram Generator
+
+When the user asks you to generate diagrams, analyze code structure, or visualize architecture for a directory or file, follow this analysis pipeline. Use terminal commands (`rg`, `find`, `cat`) for all file operations.
+
+Extract from the user's message:
+- `TARGET_PATH` — the directory or file to analyze
+- `DIAGRAM_TYPE` — `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
+- `FLOW_MODE` — `full` or `split` (default: `full`)
+
+FLOW_MODE behavior per diagram type:
+
+| Diagram type | `full` (default) | `split` |
+|---|---|---|
+| `sequence` | One unified diagram, flows in `rect` sections | One diagram per logical flow |
+| `class` | One unified class diagram | One diagram per layer |
+| `arch` | One unified architecture diagram | One diagram per subsystem |
+| `component` | Always one diagram | Always one diagram |
+
+## Global read budget
+
+**MAX_FULL_READS = 20 per invocation.** Track how many files you fully read with `cat`. Grep (`rg`) is free — use it liberally.
+
+## PHASE 1 — Discovery
+
+Find all source files:
+```bash
+find TARGET_PATH -type f \( -name "*.dart" -o -name "*.ts" -o -name "*.tsx" -o -name "*.js" -o -name "*.jsx" -o -name "*.py" -o -name "*.kt" -o -name "*.java" -o -name "*.go" -o -name "*.swift" -o -name "*.rs" -o -name "*.svelte" \) \
+  ! -name "*.g.dart" ! -name "*.freezed.dart" ! -name "*.d.ts" ! -name "*.generated.ts" \
+  ! -name "*_test.dart" ! -name "*.spec.ts" ! -name "*.test.ts" ! -name "*.test.js" ! -name "*_test.go" ! -name "*_test.py" ! -name "*Test.java" ! -name "*Test.kt" ! -name "*Tests.swift" \
+  ! -name "*.pb.go" ! -name "*_mock.go" ! -name "*_pb2.py" ! -name "*.arb" \
+  ! -path "*/build/*" ! -path "*/node_modules/*" ! -path "*/.dart_tool/*" ! -path "*/__pycache__/*" ! -path "*/dist/*" ! -path "*/.gradle/*" ! -path "*/vendor/*" ! -path "*/target/*" \
+  | sort
+```
+
+Detect language from dominant extension. Count files per subdirectory.
+
+If zero files found: report and stop.
+
+### Auto-decompose (100+ files)
+If 100+ files: split by top-level subdirectories, analyze each independently, generate integration diagram at the end. Divide read budget proportionally (min 2 per subdir, total must not exceed 20).
+
+If fewer than 2 subdirectories: fall back to grep-first strategy for 50-99 file features.
+
+## PHASE 1.5 — Paradigm Detection
+
+Run these 3 probes:
+```bash
+rg -c '(abstract\s+)?(class|interface)\s+\w+' TARGET_PATH          # OOP
+rg -c "from\s+['\"]react['\"]|\.vue$|@Component\(|extends\s+StatelessWidget" TARGET_PATH  # Component
+rg -c '^(def\s+\w+|func\s+\w+|fn\s+\w+|export\s+function)' TARGET_PATH  # Functional
+```
+
+### Classification (first match wins)
+1. Component 3+ AND OOP 5+ → **Mixed** (Angular/NestJS). Run Strategy A + B.
+2. Component 3+ → **Component-based** (React/Vue). Run Strategy B.
+3. OOP 5+ AND > 2x functional → **OOP** (Dart/Java). Run Strategy A.
+4. Functional 5+ AND > 2x OOP → **Functional** (Go/Express). Run Strategy C.
+5. Ambiguous → **Mixed**. Run A + C.
+
+## PHASE 2 — Grep Scan
+
+Use `rg` (ripgrep) for all pattern searches. Never `cat` a file until Phase 3.
+
+### STRATEGY A — OOP
+
+**Pass 1 — Structure** (use detected language pattern):
+```
+DART:    rg '^\s*(abstract\s+)?(class|mixin|enum)\s+\w+' TARGET_PATH
+TS/JS:   rg '(export\s+)?(abstract\s+)?(class|interface)\s+\w+' TARGET_PATH
+PYTHON:  rg '^class\s+\w+' TARGET_PATH
+JAVA/KT: rg '(abstract\s+|data\s+|sealed\s+)?(class|interface|object)\s+\w+' TARGET_PATH
+GO:      rg '^type\s+\w+\s+(struct|interface)|^func\s+\(\w+\s+\*?\w+\)\s+\w+' TARGET_PATH
+SWIFT:   rg '(class|struct|protocol|enum)\s+\w+' TARGET_PATH
+RUST:    rg '(pub\s+)?(struct|enum|trait)\s+\w+|impl(\s+\w+)?\s+for\s+\w+' TARGET_PATH
+```
+
+**Pass 2 — Dependencies** (imports, HTTP, endpoints, DI):
+```
+DART:    rg "^import\s+['\"]package:" TARGET_PATH
+         rg '@(GET|POST|PUT|DELETE)\(|dio\.(get|post)' TARGET_PATH
+TS/JS:   rg "^import\s+|from\s+['\"]" TARGET_PATH
+         rg 'fetch\(|axios\.(get|post)|HttpClient' TARGET_PATH
+PYTHON:  rg '^(import|from)\s+\w+' TARGET_PATH
+         rg 'requests\.(get|post)|httpx\.' TARGET_PATH
+GO:      rg '^import\s+\(|"[\w./-]+"' TARGET_PATH
+         rg 'http\.(Get|Post)|\.HandleFunc' TARGET_PATH
+```
+
+### STRATEGY B — Component-Based
+```
+rg '(export\s+)?(function|const)\s+[A-Z]\w+' TARGET_PATH        # Components
+rg '<[A-Z]\w+[\s/>]' TARGET_PATH                                  # JSX children
+rg 'use[A-Z]\w+\s*\(' TARGET_PATH                                 # Hooks
+rg 'useQuery|useMutation|fetch\(|axios\.' TARGET_PATH              # API calls
+rg 'createContext|useContext|createStore|createSlice' TARGET_PATH   # State
+```
+
+### STRATEGY C — Functional
+```
+rg '^(def|async\s+def)\s+\w+|^func\s+\w+|^(pub\s+)?fn\s+\w+' TARGET_PATH  # Functions
+rg '@app\.(get|post)|(app|router)\.(get|post)' TARGET_PATH                   # Routes
+rg "import.*from\s+['\"]\./" TARGET_PATH                                      # Internal deps
+```
+
+## PHASE 2.5 — Structural Importance Scoring
+
+Classify files into tiers using structural signals (not names):
+
+**TIER 1 (must read)** — any of:
+- Contains `abstract class`, `protocol`, or `trait`
+- Extended/implemented by 3+ other files
+- Imported by 5+ files (check with: `rg -c 'import.*filename' TARGET_PATH`)
+- Has generic type parameters AND extended by 1+ files
+
+**Barrel file guard:** `index.ts`/`index.js` with only re-exports → Tier 3.
+
+**TIER 2 (read if budget allows):**
+- DI registries, entry points (`main.*`, `app.*`), files with 2+ relationships
+
+**TIER 3:** Everything else — grep only.
+
+**Cross-boundary:** For Tier 1 classes not in TARGET_PATH, search up to 2 directory levels above.
+
+## PHASE 3 — File Reading
+
+Use `cat` for full reads. Track count against MAX_FULL_READS = 20.
+
+- **class diagram**: Read Tier 1 + DI registries (5-10 files)
+- **sequence diagram**: Read Tier 1 + depth-first chain trace from entry point (8-15 files)
+- **component/arch**: Zero reads — grep data is sufficient. Do NOT read Tier 1 files.
+- **all**: Combine class + sequence reads (10-18 files)
+
+## PHASE 4 — Diagram Generation
+
+### Mermaid guardrails
+- **Dark theme:** Start every diagram with `%%{init: {'theme': 'dark'}}%%`
+- **Participant labels:** No `<br/>`, no HTML. Use short aliases. Max 30 chars.
+- **`rect` blocks (sequence):** `rect rgba(255, 255, 255, 0.1)` and `rgba(255, 255, 255, 0.05)` alternating
+- **`autonumber`:** Cumulative, does NOT reset in rect blocks
+- Prefer `%% --- Layer ---` comments over `namespace` in classDiagram
+
+Every diagram MUST be in a fenced ```mermaid block. Never mix prose inside the fence.
+
+### `class` — Structure Diagram
+- **OOP:** `classDiagram` with stereotypes, inheritance, 3-5 fields/methods per class
+- **Component:** `graph TB` component tree with parent→child edges
+- **Functional:** `graph LR` module map with exports
+
+### `sequence` — Flow Diagram
+- **full mode:** Single diagram, flows separated by `rect` blocks with `Note over` labels
+- **split mode:** One diagram per logical flow
+- Use actual class/method/function names from code
+
+### `component` — Dependency Diagram
+- `graph LR` — internal modules as rectangles, external as rounded nodes
+- Show HTTP endpoints, package imports, service dependencies
+
+### `arch` — Architecture Overview
+- **full:** Single `graph TB` with `subgraph` per layer
+- **split:** One diagram per subsystem + integration diagram
+- Flag layer violations
+
+## PHASE 5 — Insights
+
+Add **Key Insights** after diagrams:
+- Paradigm and confidence level
+- Entity count and distribution
+- External dependencies
+- Read budget usage
+- Hotspots (most-depended-on class/component/module)
+- Architectural violations or circular dependencies
+
+## Guardrails
+- Never invent entities not found in code
+- Never exceed 20 file reads
+- 30 nodes max per diagram — split if larger
+- Skip empty diagram types with explanation
