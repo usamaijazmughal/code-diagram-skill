@@ -1,6 +1,6 @@
 # code-diagram
 
-**v1.0.1** | [Changelog](#changelog)
+**v1.0.2** | [Changelog](#changelog)
 
 > An AI skill that reads your actual source code and generates Mermaid diagrams.
 > Point it at any directory, file, line range, or multiple targets. It detects the language, paradigm, and produces class, sequence, component, and architecture diagrams.
@@ -189,7 +189,7 @@ The version is in the plugin metadata:
 - **Claude Code:** Check `plugins/code-diagram/.claude-plugin/plugin.json` or `.claude-plugin/marketplace.json`
 - **All tools:** Compare your local file with the [latest on GitHub](https://github.com/usamaijazmughal/code-diagram-skill/blob/main/plugins/code-diagram/.claude-plugin/plugin.json)
 
-Current version: **1.0.1**
+Current version: **1.0.2**
 
 ---
 
@@ -251,6 +251,15 @@ code-diagram-skill/
 ---
 
 ## Changelog
+
+### v1.0.2
+- Detail level prompt: method names (recommended, secure) vs rich details (opt-in)
+- 9 external operation categories: DB, cache, storage, queue, WebSocket, push, auth, analytics, gRPC
+- Rich mode: full endpoint paths, `READ/WRITE entity` for DB, compact operations for all others
+- Applies to ALL diagram types: sequence, class, component, architecture
+- DB security: never shows query text, columns, or schema in any mode
+- Reference table for sequence diagrams with 15+ steps (rich mode only)
+- 3 batched composite greps (not 9 separate) for cost-effectiveness
 
 ### v1.0.1
 - Added 5 input modes: line range, multi-path, pasted code, file validation, @ reference docs

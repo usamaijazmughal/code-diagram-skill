@@ -1,6 +1,6 @@
 ---
 name: code-diagram
-version: 1.0.1
+version: 1.0.2
 description: Analyzes source code and generates Mermaid diagrams. Accepts a directory, file, @reference, line range (path:10-50), multiple targets ([path1, path2]), or pasted code. Supports class, sequence, component, and architecture diagrams for Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust.
 argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split]"
 allowed-tools: Glob Grep Read
@@ -562,12 +562,44 @@ Relative imports (internal dependencies):
 
 ---
 
+---
+
+### Pass 3 — External Operations (all strategies)
+
+Run 3 composite greps in parallel with Pass 1 and Pass 2. These detect external system interactions for richer diagram annotations.
+
+**Pass 3A — Data operations (DB + Cache + Storage):** 1 grep combining:
+```
+DART:    @Query\(|database\.rawQuery|Hive|box\.(put|get)|SharedPreferences|\.getString\(|\.setString\(|File\(|\.writeAsBytes|path_provider
+TS/JS:   prisma\.\w+\.(find|create|update|delete)|mongoose\.|sequelize|typeorm|localStorage\.|sessionStorage\.|AsyncStorage|fs\.(writeFile|readFile)|s3\.(putObject|getObject)
+PYTHON:  session\.query|\.objects\.(filter|get|create|all)|cursor\.execute|redis\.|@Cacheable|cache\.(get|set)|open\(|s3\.|storage\.
+JAVA/KT: @Query\(|\.findBy\w+|JpaRepository|@Entity|@Cacheable|RedisTemplate|S3Client|\.putObject
+GO:      db\.(Query|Exec)|gorm\.|sqlx\.|redis\.|os\.(Open|Create)|s3\.
+SWIFT:   NSFetchRequest|CoreData|RealmSwift|UserDefaults|NSCache|FileManager
+RUST:    diesel::|sqlx::|sea_orm::|redis::|cached::|std::fs::
+```
+
+**Pass 3B — Communication (Queue + WebSocket + Push):** 1 grep combining:
+```
+ALL: kafka\.|rabbitmq\.|\.publish\(|\.subscribe\(|SQS|SNS|celery\.|nats\.|BullMQ|EventBus|DataBus|WebSocket|socket\.io|ws\.(send|on)|\.sink\.add|\.onMessage|FirebaseMessaging|\.sendNotification|FCM|OneSignal|web-push|apns
+```
+
+**Pass 3C — Security & tracking (Auth + Analytics):** 1 grep combining:
+```
+ALL: jwt\.(sign|verify)|FirebaseAuth|Auth0|Keycloak|@Secured|@PreAuthorize|passport\.|@login_required|BiometricAuth|\.track\(|\.logEvent\(|analytics\.|mixpanel\.|amplitude\.|gtag\(|MicroAnalytics
+```
+
+**False positive guard:** These patterns are candidates. Confirm against the file's imports — `.find()` in a file importing `prisma` = DB operation. `.find()` in a file with only standard library imports = array method. Ignore unconfirmed matches.
+
+---
+
 ### After all grep passes — build inventory
 
 For **OOP**: class list, relationship map, API calls, external deps, DI registrations
 For **Component-based**: component list, render tree, hook usage, API calls, shared state
 For **Functional**: function list, module deps, route map
 For **Mixed**: merge all; tag each entity with its paradigm type
+**All strategies**: external operation list (DB, cache, storage, queue, websocket, push, auth, analytics) with file locations
 
 ---
 
@@ -687,6 +719,31 @@ Read Tier 1 files + sequence chain-trace files. Component and arch diagrams are 
 
 ---
 
+## PHASE 3.5 — Detail Level Prompt
+
+When Pass 3 detects ANY external operations (HTTP endpoints, DB, cache, queue, etc.), ask the user ONCE before generating diagrams:
+
+```
+External operations detected (HTTP endpoints, database, cache, ...).
+
+Detail level for ALL diagrams:
+  1. Method names only (recommended) — safe to share externally
+     Example: Repository->>PaymentDataSource: createPayment()
+
+  2. Rich details — shows endpoints, operations, targets (internal use)
+     Example: Repository->>API: POST /api/v1/payments
+     Example: Service->>DB: WRITE transactions
+
+Which level? (1/2, default: 1)
+```
+
+Default is **method names** (secure). Rich is opt-in for internal/trusted contexts.
+Only show this prompt when external operations are actually found. If Pass 3 found nothing, skip entirely.
+
+Store the user's choice as `DETAIL_LEVEL` (`method-names` or `rich`) and apply it in Phase 4 across all diagram types.
+
+---
+
 ## PHASE 4 — Paradigm-Aware Diagram Generation
 
 Generate only the diagram types requested by `DIAGRAM_TYPE`. For `all`, generate all four.
@@ -710,6 +767,43 @@ Generate only the diagram types requested by `DIAGRAM_TYPE`. For `all`, generate
 - **`namespace` in classDiagram:** Only supported in Mermaid 10.3+. Prefer `%% --- Layer Name ---` comment separators for wider compatibility.
 - **`autonumber` in sequence:** Numbering is cumulative across the entire diagram — it does NOT reset inside `rect` blocks. This is expected behavior.
 
+### Detail level rules (applied to ALL diagram types below)
+
+**When `DETAIL_LEVEL` = `method-names` (default):** Current behavior. Use class/method names only. No endpoints, no operation details. Identical to v1.0.1 output.
+
+**When `DETAIL_LEVEL` = `rich`:** Apply these rules per diagram type:
+
+**Sequence diagram (rich):**
+- HTTP: full endpoint path as arrow label. `Repository->>API: POST /api/v1/payments`. Add `Note` for request payload fields.
+- DB: operation type + entity only. `Repository->>DB: WRITE transactions`. **Never show query text.**
+- Cache/Queue/WS/Auth/Analytics/Push: compact operation + target. `Service->>Cache: GET user session`
+- Add external participants for each detected category (`participant API as External API`, `participant DB as Database`, etc.). Only add what was found.
+
+**Class diagram (rich):**
+- Annotate repository/service methods with their operation: `+processPayment() POST /api/v1/payments`
+- Annotate data-layer classes with DB entity stereotype: `<<DB: transactions>>`
+
+**Component diagram (rich):**
+- Edge labels show actual targets: `-- POST /api/v1/payments -->` instead of `-- HTTP -->`
+- DB edges show entity: `-- READ users -->` instead of `-- database -->`
+
+**Architecture diagram (rich):**
+- External layer nodes show specific services: `API: /api/v1/payments`, `DB: users, transactions`
+
+**Security guardrail (all diagrams, all modes):**
+- DB: operation type + entity name ONLY (`READ users`, `WRITE transactions`). Never query text, columns, filters, or schema.
+- Auth: Never surface token values. Only `VERIFY token`.
+
+**Reference table (rich mode, sequence only, 15+ steps):**
+After sequence diagrams with 15+ steps, add a reference table:
+```
+| Step | Category | Operation | Target | Source |
+|------|----------|-----------|--------|--------|
+| 4 | HTTP | POST | /api/v1/payments | datasource.dart:42 |
+| 7 | Database | WRITE | transactions | repository.dart:28 |
+```
+Skip for diagrams under 15 steps.
+
 ---
 
 ### `class` — Structure Diagram
@@ -723,6 +817,7 @@ Produce a **single** diagram containing all entities.
 - `<<abstract>>`, `<<interface>>`, `<<enum>>` stereotypes
 - Inheritance `<|--`, composition `*--`, dependency `..>`
 - 3–5 key public fields and methods per class
+- If `DETAIL_LEVEL` = `rich`: annotate methods with endpoint, add `<<DB: entity>>` stereotypes
 - Group layers with `%% --- Layer Name ---` comment separators
 
 **Component paradigm → `graph TB` (Component Tree)**
@@ -802,8 +897,9 @@ Each flow gets a bold heading, one sentence, and its own fenced mermaid block wi
 
 **All paradigms → Mermaid `graph LR`**
 - Internal modules as rectangular nodes, external services/packages as rounded nodes `(( ))`
-- Edge labels: HTTP POST, imports, subscribes to, reads from, etc.
-- Sources: all HTTP calls + all external package imports from grep (no full reads needed)
+- If `DETAIL_LEVEL` = `rich`: edge labels show actual targets (`-- POST /api/v1/payments -->`, `-- READ users -->`)
+- If `DETAIL_LEVEL` = `method-names`: edge labels are generic (`-- HTTP call -->`, `-- database -->`)
+- Sources: all HTTP calls + all external package imports + Pass 3 external operations from grep
 
 ---
 
@@ -818,15 +914,19 @@ Produce a **single** `graph TB` with all layers in one view.
 - Each entity in its correct layer (determine by directory path and class role)
 - Cross-layer arrows only at interfaces/abstractions
 - Flag any layer violation (e.g. Presentation → Data bypassing Domain)
+- If `DETAIL_LEVEL` = `rich`: External layer nodes show specific services (`API: /api/v1/payments`, `DB: users, transactions`)
+- If `DETAIL_LEVEL` = `method-names`: External nodes are generic (`External API`, `Database`)
 
 **Component paradigm:**
 - `subgraph Pages`, `subgraph Components`, `subgraph Hooks`, `subgraph Services`, `subgraph State`
 - Show UI → hooks → services → APIs dependency chain
 - Annotate state management approach
+- If `DETAIL_LEVEL` = `rich`: service nodes show actual endpoints
 
 **Functional paradigm:**
 - `subgraph Handlers`, `subgraph BusinessLogic`, `subgraph DataAccess`, `subgraph External`
 - Each function in its layer by responsibility
+- If `DETAIL_LEVEL` = `rich`: external nodes show specific targets
 
 #### FLOW_MODE: `split`
 

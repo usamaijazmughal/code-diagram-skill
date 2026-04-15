@@ -1,5 +1,5 @@
 ---
-description: "v1.0.1 — Analyzes source code and generates Mermaid diagrams. Accepts directories, files, line ranges (path:10-50), multiple targets ([path1, path2]), or pasted code. Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split]"
+description: "v1.0.2 — Analyzes source code and generates Mermaid diagrams. Accepts directories, files, line ranges (path:10-50), multiple targets ([path1, path2]), or pasted code. Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split]"
 ---
 
 You are a code analysis expert. Analyze real source code and generate accurate Mermaid diagrams. Never guess or invent — every element must come directly from the code.
@@ -151,6 +151,27 @@ Use `cat` for reads. Track against MAX_FULL_READS = 20.
 - **sequence**: Tier 1 + depth-first chain trace (8-15 reads)
 - **component/arch**: Zero reads. Do NOT read Tier 1 — grep is sufficient.
 - **all**: Class + sequence reads combined (10-18 reads)
+
+## Pass 3 — External Operations
+
+Run 3 composite greps in parallel:
+- **3A — Data:** DB (`@Query`, `prisma`, `mongoose`, `JpaRepository`, `gorm`, `sqlx`) + Cache (`redis`, `SharedPreferences`, `localStorage`, `UserDefaults`) + Storage (`s3`, `fs.writeFile`, `File`)
+- **3B — Communication:** Queue (`kafka`, `rabbitmq`, `SQS`, `EventBus`) + WebSocket (`socket.io`, `WebSocket`) + Push (`FCM`, `OneSignal`)
+- **3C — Security & Tracking:** Auth (`jwt`, `FirebaseAuth`, `passport`, `@Secured`) + Analytics (`track()`, `logEvent()`, `mixpanel`)
+
+Confirm against imports. `.find()` + prisma import = DB. `.find()` without DB import = array method.
+
+## Detail Level Prompt
+
+When external operations detected, ask once:
+```
+  1. Method names only (recommended) — safe to share
+  2. Rich details — endpoints, operations, targets (internal use)
+Which? (1/2, default: 1)
+```
+Rich: full endpoints, `READ/WRITE entity` for DB (no query text), compact ops for cache/queue/auth.
+Method-names: identical to v1.0.1.
+Applies to ALL diagram types.
 
 ## PHASE 4 — Diagram Generation
 

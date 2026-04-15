@@ -8,7 +8,7 @@
       "name": "code-diagram",
       "source": "./plugins/code-diagram",
       "description": "Analyzes source code and generates Mermaid diagrams — class, sequence, component, and architecture. Supports Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust.",
-      "version": "1.0.1"
+      "version": "1.0.2"
     }
   ]
 }

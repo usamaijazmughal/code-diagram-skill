@@ -1,4 +1,4 @@
-# Code Diagram Generator v1.0.1
+# Code Diagram Generator v1.0.2
 
 When the user asks you to generate diagrams, analyze code structure, or visualize architecture, follow this analysis pipeline. Use terminal commands (`rg`, `find`, `cat`) for all file operations.
 
@@ -167,6 +167,35 @@ Use `cat` for full reads. Track count against MAX_FULL_READS = 20.
 - **sequence diagram**: Read Tier 1 + depth-first chain trace from entry point (8-15 files)
 - **component/arch**: Zero reads — grep data is sufficient. Do NOT read Tier 1 files.
 - **all**: Combine class + sequence reads (10-18 files)
+
+## Pass 3 — External Operations (all strategies)
+
+Run 3 composite greps in parallel with Pass 1 and Pass 2:
+- **Pass 3A — Data (DB + Cache + Storage):** `@Query|database\.rawQuery|Hive|prisma\.\w+|mongoose\.|session\.query|JpaRepository|gorm\.|sqlx\.|redis\.|SharedPreferences|localStorage\.|UserDefaults|s3\.|fs\.(writeFile|readFile)`
+- **Pass 3B — Communication (Queue + WS + Push):** `kafka\.|rabbitmq\.|\.publish\(|\.subscribe\(|SQS|EventBus|WebSocket|socket\.io|FirebaseMessaging|FCM|OneSignal`
+- **Pass 3C — Security & Tracking (Auth + Analytics):** `jwt\.(sign|verify)|FirebaseAuth|Auth0|@Secured|passport\.|\.track\(|\.logEvent\(|analytics\.|mixpanel\.`
+
+Confirm against imports — `.find()` importing prisma = DB. `.find()` with no DB import = array method.
+
+## Detail Level Prompt
+
+When external operations are detected, ask before generating:
+```
+Detail level for ALL diagrams:
+  1. Method names only (recommended) — safe to share externally
+  2. Rich details — endpoints, operations, targets (internal use)
+Which level? (1/2, default: 1)
+```
+
+**Rich mode rules:**
+- HTTP: full endpoint path, never truncate
+- DB: operation type + entity only (`READ users`). NEVER show query text (security)
+- Cache/Queue/WS/Auth/Analytics: compact operation + target
+- Class diagram: annotate methods with endpoint, add `<<DB: entity>>` stereotypes
+- Component diagram: edge labels show actual targets instead of generic
+- Architecture: external nodes show specific services
+
+**Method-names mode:** identical to v1.0.1 output. No changes.
 
 ## PHASE 4 — Diagram Generation
 

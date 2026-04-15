@@ -1,4 +1,4 @@
-# Code Diagram Generator v1.0.1 — ChatGPT System Prompt
+# Code Diagram Generator v1.0.2 — ChatGPT System Prompt
 
 > **How to use:** Copy the content below the line into ChatGPT's "Custom Instructions" or paste it at the start of a conversation. Then ask: "Analyze this codebase and generate diagrams" along with a zip upload or pasted code.
 
@@ -103,6 +103,17 @@ Add **Key Insights** after diagrams:
 - External APIs/services
 - Hotspots (most-depended-on entities)
 - Architectural violations or circular dependencies
+
+## Detail Level
+
+When you detect external operations (HTTP endpoints, DB calls, cache, queue, etc.), ask the user:
+```
+Detail level for ALL diagrams:
+  1. Method names only (recommended) — safe to share
+  2. Rich details — endpoints, operations, targets (internal use)
+```
+Default: method names. Rich: full endpoint paths, `READ/WRITE entity` for DB (no query text ever), compact operations for cache/queue/auth/analytics.
+DB security: never show query text, column names, or schema in any mode.
 
 ## Output rules
 
