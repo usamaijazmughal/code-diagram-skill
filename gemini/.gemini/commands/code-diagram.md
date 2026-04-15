@@ -1,5 +1,5 @@
 ---
-description: "v1.1.0 — Analyzes source code and generates Mermaid diagrams. Accepts directories, files, line ranges (path:10-50), multiple targets ([path1, path2]), or pasted code. Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split] [rich] [low|medium|high|max]"
+description: "v1.2.0 — Analyzes source code and generates Mermaid diagrams. Accepts directories, files, line ranges (path:10-50), multiple targets ([path1, path2]), or pasted code. Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split] [rich] [low|medium|high|max]"
 ---
 
 You are a code analysis expert. Analyze real source code and generate accurate Mermaid diagrams. Never guess or invent — every element must come directly from the code.
@@ -21,12 +21,12 @@ Then parse remaining tokens (flags, any order):
 - `DIAGRAM_TYPE`: `class`, `sequence`, `component`, `arch`, `all` (default: `all`)
 - `FLOW_MODE`: `full` or `split` (default: `full`)
 - `rich` → `DETAIL_LEVEL` = rich (show endpoints, operations). Default: method-names (secure)
-- `low`, `medium`, `high`, `max` or `effort=VALUE` → `EFFORT_LEVEL`. Default: `medium`
-  - `low`: 5 reads, 3-hop trace
-  - `medium`: 15 reads, 8-hop trace
-  - `high`: 25 reads, 15-hop trace, DI resolution, abstract→concrete, mixin tracking
-  - `max`: no read cap, unlimited trace, full DI graph, no auto-decompose split
-- `deep` → alias for `high` (backward compatibility)
+- `low`, `medium`, `max` or `effort=VALUE` → `EFFORT_LEVEL`. Default: `medium`
+  - `low`: 10 reads, 5-hop trace
+  - `medium`: 20 reads, 12-hop trace
+  - `max`: no read cap, unlimited trace, no auto-decompose split
+  - Abstract resolution + mixin tracking: ALWAYS active at all levels
+- `high` or `deep` → alias for `max` (backward compatibility)
 
 FLOW_MODE behavior:
 
@@ -45,7 +45,7 @@ Syntax: `path/file.dart:10-50`. Read only that range. Note: "Entities outside th
 
 ### Multi-path mode
 Syntax: `[path1, path2, ...]`. Supports mixed types (directories, files, line ranges).
-Budget from `deep` flag: Balanced (default) = scaled reads (2 items=15, 3=12, 4-5=10, 6+=8). Deep = 20 per item.
+Budget per item from `EFFORT_LEVEL`: low=10, medium=20, max=unlimited.
 After analysis, detect cross-path imports. Connected paths get dashed arrows between subgraphs. Independent paths shown as separate sections.
 
 ### Pasted code mode
@@ -53,7 +53,7 @@ If input doesn't match any path pattern: grep project for the code. If found →
 
 ## Global read budget
 
-Budget from `EFFORT_LEVEL`: low=5, medium=15 (default), high=25, max=unlimited. Use shell `cat` for reads, `rg` for search. Grep is free; reads are expensive.
+Budget from `EFFORT_LEVEL`: low=10, medium=20 (default), max=unlimited. Use shell `cat` for reads, `rg` for search. Grep is free; reads are expensive.
 
 ## Discovery
 
@@ -160,10 +160,10 @@ Applies to ALL diagram types.
 
 ## File Reading
 
-Read budget from `EFFORT_LEVEL`: low=5, medium=15, high=25, max=unlimited.
+Read budget from `EFFORT_LEVEL`: low=10, medium=20, max=unlimited.
 
-- **class**: Tier 1 + DI registries. At high/max: read concrete implementors of abstract classes.
-- **sequence**: Tier 1 + chain trace. At high/max: DI resolution (check GetIt/Hilt/Spring bindings), abstract→concrete grep (`extends X`), mixin file reading. At max: unlimited hops, mixin-of-mixin.
+- **class**: Tier 1 + DI registries + concrete implementors of abstract classes
+- **sequence**: 5-step unconditional chain trace: read entry → follow calls → resolve abstracts (DI registry then grep) → resolve mixins → repeat until boundary or budget
 - **component/arch**: Zero reads. Do NOT read Tier 1.
 - **all**: Class + sequence reads combined
 
@@ -200,6 +200,6 @@ Read budget from `EFFORT_LEVEL`: low=5, medium=15, high=25, max=unlimited.
 Bullet points: paradigm + confidence, entity count, external deps, read budget usage, hotspots, violations.
 
 ## Guardrails
-- Never invent entities. Never exceed effort budget (low=5, medium=15, high=25, max=unlimited). 30 nodes max per diagram.
+- Never invent entities. Never exceed effort budget (low=10, medium=20, max=unlimited). 30 nodes max per diagram.
 - Never apply OOP patterns to component/functional codebases.
 - Skip empty diagrams with explanation.

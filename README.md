@@ -1,6 +1,6 @@
 # code-diagram
 
-**v1.1.0** | [Changelog](#changelog)
+**v1.2.0** | [Changelog](#changelog)
 
 > An AI skill that reads your actual source code and generates Mermaid diagrams.
 > Point it at any directory, file, line range, or multiple targets. It detects the language, paradigm, and produces class, sequence, component, and architecture diagrams.
@@ -55,7 +55,7 @@ Restart your tool after installing. For Claude Code, type `/code-diagram` and it
 /code-diagram lib/app sequence high                      # shorthand
 /code-diagram lib/app sequence effort=high               # explicit (self-documenting)
 /code-diagram lib/app sequence effort=max rich           # exhaustive + endpoints
-/code-diagram [lib/auth, lib/payments] effort=high       # 25 reads per target
+/code-diagram [lib/auth, lib/payments] effort=max        # unlimited per target
 ```
 
 | Input mode | When to use |
@@ -69,10 +69,11 @@ Restart your tool after installing. For Claude Code, type `/code-diagram` and it
 | Flag | What it does | Default |
 |---|---|---|
 | `rich` | Show endpoints, DB entities, operations in diagram labels | Off (method-names only, secure) |
-| `low` | Quick shallow — 5 reads, 3-hop trace, structure only | — |
-| `medium` | Balanced — 15 reads, 8-hop trace | Default |
-| `high` | Deep — 25 reads, 15-hop, DI resolution, abstract→concrete, mixin tracking | — |
-| `max` | Exhaustive — no read cap, unlimited trace, full DI graph traversal | — |
+| `low` | Quick — 10 reads, 5-hop trace | — |
+| `medium` | Default — 20 reads, 12-hop trace | Default |
+| `max` | Exhaustive — no read cap, unlimited trace, no auto-decompose split | — |
+
+Abstract resolution and mixin tracking are **always active** at all effort levels — they are correctness steps, not depth options.
 
 ---
 
@@ -132,7 +133,7 @@ Each diagram adapts to the detected paradigm:
 | Size | Strategy |
 |---|---|
 | **1 file** | Read directly, focused diagram |
-| **2-49 files** | Full analysis, up to 15 reads (medium effort) |
+| **2-49 files** | Full analysis, up to 20 reads (medium effort) |
 | **50-99 files** | Grep-first, happy-path sequence only |
 | **100+ files** | Auto-decompose by subdirectory + integration diagram |
 | **Multi-path** | Per-item budget from effort level, cross-path relationship detection |
@@ -140,7 +141,7 @@ Each diagram adapts to the detected paradigm:
 Use effort levels to control depth. Default is `medium` (cheap, good for most cases):
 
 ```bash
-/code-diagram lib/features/payments high           # 25 reads, DI resolution + abstract tracing
+/code-diagram lib/features/payments effort=max     # unlimited reads, no auto-decompose split
 /code-diagram lib/features/payments max            # no cap, treats as one unit, full DI graph
 /code-diagram [lib/auth, lib/payments] max         # exhaustive per target
 ```
@@ -158,7 +159,7 @@ Discovery  ->  Paradigm  ->  Grep Scan  ->  Scoring  ->  Reading  ->  Diagrams  
 2. **3 grep probes** classify paradigm: OOP / Component / Functional / Mixed
 3. **2 batched grep passes** per language extract classes, relationships, HTTP calls, imports, DI
 4. **Tier scoring** identifies foundational files using structural signals (not naming)
-5. **Selective reading** — only files that grep can't explain (5–25 reads based on effort, unlimited at `max`). Component + arch diagrams need **zero reads**
+5. **Selective reading** — only files that grep can't explain (10–20 reads at low/medium, unlimited at `max`). Component + arch diagrams need **zero reads**
 6. **Mermaid output** with dark theme, 30-node cap, `rect` flow separation
 7. **Insights** — hotspots, violations, external deps, budget usage
 
@@ -179,7 +180,7 @@ Run these on the same directory, from cheapest to most expensive:
 /code-diagram lib/features/payments sequence           # 5-12 reads
 /code-diagram lib/features/payments all                # 8-18 reads
 /code-diagram lib/features/payments all rich           # same reads, richer labels
-/code-diagram lib/features/payments all high           # DI resolution + abstract tracing
+/code-diagram lib/features/payments all effort=max     # exhaustive
 /code-diagram lib/features/payments all max rich       # exhaustive + endpoints
 ```
 
@@ -191,23 +192,23 @@ Run these on the same directory, from cheapest to most expensive:
 | `arch` | **0** | Any reads = wasted |
 | `class` | 3–8 | Above 10 = over-reading |
 | `sequence` | 5–12 | Above 15 = reading sideways |
-| `all` (medium) | 8–15 | Above 15 = budget pressure at medium effort |
+| `all` (medium) | 10–18 | Above 20 = budget pressure at medium effort |
 
 ### Where to find cost data
 
 Every run reports read budget usage in the **Insights** section at the end:
 ```
-Read budget usage: 12 of 15 reads used (medium effort)
+Read budget usage: 14 of 20 reads used (medium effort)
 ```
 
 ### Red flags
 
 - `component` or `arch` triggering file reads (should be zero)
 - Sequence chain reading sibling files not in the call chain
-- Hitting the budget cap (15 at medium, 25 at high) on a feature under 30 files
+- Hitting the budget cap (20 at medium) on a feature under 30 files
 - `rich` flag increasing read count (it shouldn't — `rich` only changes labels, not reads)
-- `medium` effort using more than 15 reads
-- `high` effort not resolving abstract→concrete (DI binding should be checked)
+- `medium` effort using more than 20 reads
+- Abstract classes not being resolved to concrete (DI binding should be checked at all levels)
 
 ---
 
@@ -247,7 +248,7 @@ The version is in the plugin metadata:
 - **Claude Code:** Check `plugins/code-diagram/.claude-plugin/plugin.json` or `.claude-plugin/marketplace.json`
 - **All tools:** Compare your local file with the [latest on GitHub](https://github.com/usamaijazmughal/code-diagram/blob/main/plugins/code-diagram/.claude-plugin/plugin.json)
 
-Current version: **1.1.0**
+Current version: **1.2.0**
 
 ---
 
@@ -267,7 +268,7 @@ Current version: **1.1.0**
 
 <details>
 <summary><b>Does it read every file?</b></summary>
-No. It greps all files (cheap) and only reads the most important files. At default (`medium`): up to 15 reads. At `high`: up to 25. At `max`: unlimited but traces only what's in the call chain. Component and architecture diagrams need zero reads.
+No. It greps all files (cheap) and only reads the most important files. At default (`medium`): up to 20 reads. At `max`: unlimited but traces only what's in the call chain. Component and architecture diagrams need zero reads.
 </details>
 
 <details>
@@ -309,6 +310,14 @@ code-diagram/
 ---
 
 ## Changelog
+
+### v1.2.0
+- **Simplified effort levels:** `low` (10 reads), `medium` (20 reads, default), `max` (unlimited). Removed `high`.
+- **Abstract resolution + mixin tracking now UNCONDITIONAL** — active at ALL effort levels including default `medium`. No longer gated behind `high`/`max`.
+- **5-step unconditional chain trace:** read → follow → resolve abstracts → resolve mixins → repeat. No conditions, no "if effort=high" gates. LLM follows reliably.
+- Effort only controls budget and hop count — quality is always maximum.
+- `high` and `deep` kept as aliases for `max` (backward compatibility).
+- Skill reduced from ~994 to ~920 lines with cleaner, simpler logic.
 
 ### v1.1.0
 - **Effort levels:** `low`, `medium` (default), `high`, `max` — replaces `deep` flag

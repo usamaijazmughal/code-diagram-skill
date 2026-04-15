@@ -1,8 +1,8 @@
 ---
 name: code-diagram
-version: 1.1.0
+version: 1.2.0
 description: Analyzes source code and generates Mermaid diagrams. Accepts a directory, file, @reference, line range (path:10-50), multiple targets ([path1, path2]), or pasted code. Supports class, sequence, component, and architecture diagrams for Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust.
-argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split] [rich] [effort=low|medium|high|max]"
+argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split] [rich] [effort=low|medium|max]"
 allowed-tools: Glob Grep Read
 ---
 
@@ -12,7 +12,7 @@ You are a code analysis expert. Your job is to analyze real source code and gene
 
 Parse `$ARGUMENTS`:
 - If `$ARGUMENTS` is empty or blank → print usage help and stop:
-  `"Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split] [rich] [low|medium|high|max]"`
+  `"Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split] [rich] [effort=low|medium|max]"`
 
 ### Step 1 — Detect input mode (check in this exact order)
 
@@ -31,9 +31,10 @@ After extracting the input, scan ALL remaining tokens. Each token is matched ind
 - `class`, `sequence`, `component`, `arch`, or `all` → `DIAGRAM_TYPE`. Default: `all`
 - `full` or `split` → `FLOW_MODE`. Default: `full`
 - `rich` → `DETAIL_LEVEL` = `rich` (show endpoints, operations, targets)
-- `low`, `medium`, `high`, or `max` → `EFFORT_LEVEL`. Default: `medium`
-- `effort=low`, `effort=medium`, `effort=high`, or `effort=max` → same as above (explicit form)
-- `deep` → treated as alias for `high` (backward compatibility)
+- `low`, `medium`, or `max` → `EFFORT_LEVEL`. Default: `medium`
+- `effort=low`, `effort=medium`, or `effort=max` → same as above (explicit form)
+- `high` → treated as alias for `max` (backward compatibility from v1.1.0)
+- `deep` → treated as alias for `max` (backward compatibility)
 
 If a token doesn't match any of the above → validation error.
 
@@ -41,16 +42,17 @@ If a token doesn't match any of the above → validation error.
 - `DIAGRAM_TYPE` = `all`
 - `FLOW_MODE` = `full`
 - `DETAIL_LEVEL` = `method-names` (secure — no endpoints, no operation details shown)
-- `EFFORT_LEVEL` = `medium` (current behavior, 15 reads, 8-hop chain trace)
+- `EFFORT_LEVEL` = `medium` (20 reads, 12-hop chain trace, abstract resolution + mixin tracking included)
 
 ### Effort levels
 
-| Level | Read budget | Chain trace | Abstract resolution | Mixin/composition tracking | Use case |
-|---|---|---|---|---|---|
-| `low` | 5 files | 3 hops | No | No | Quick orientation, large codebases |
-| `medium` | 15 files | 8 hops | Tier 1 only | Identified, not traced | Everyday use, PR reviews |
-| `high` | 25 files | 15 hops | DI registry + inheritance search | Read + trace mixin files | Architecture docs, detailed flows |
-| `max` | No cap | Unlimited | Full DI graph + all implementors | Full mixin-of-mixin resolution | Complex flows, cross-module audit |
+| Level | Read budget | Chain trace | Use case |
+|---|---|---|---|
+| `low` | 10 files | 5 hops | Quick orientation, large codebases |
+| `medium` | 20 files | 12 hops | Everyday use, PR reviews, architecture docs |
+| `max` | No cap | Unlimited | Complex flows, cross-module audit, exhaustive |
+
+**Abstract resolution and mixin tracking are ALWAYS active at all effort levels.** They are not gated — they are correctness steps. Effort only controls how many files can be read and how many hops the chain trace follows.
 
 ### Valid examples
 
@@ -63,10 +65,10 @@ If a token doesn't match any of the above → validation error.
 /code-diagram lib/app sequence split                     # split mode
 /code-diagram lib/app sequence rich                      # rich details (endpoints, operations)
 # Effort — both forms work:
-/code-diagram lib/app sequence high                      # shorthand
-/code-diagram lib/app sequence effort=high               # explicit (self-documenting)
+/code-diagram lib/app sequence max                       # shorthand
+/code-diagram lib/app sequence effort=max                # explicit (self-documenting)
 /code-diagram lib/app sequence effort=max rich           # exhaustive + show endpoints
-/code-diagram [lib/auth, lib/payments] effort=high       # multi-path, 25 reads per target
+/code-diagram [lib/auth, lib/payments] effort=max        # multi-path, unlimited per target
 ```
 
 ### FLOW_MODE behavior per diagram type
@@ -146,14 +148,7 @@ If the extension is valid:
 
 **Validation:** Each item is validated individually. If any item fails validation (path not found, unsupported type), report which item failed and continue with the remaining valid items.
 
-**Read budget per item (from `EFFORT_LEVEL`):**
-
-| Effort | Budget per item |
-|---|---|
-| `low` | 5 per item |
-| `medium` | 15 per item |
-| `high` | 25 per item |
-| `max` | No cap per item |
+**Read budget per item:** From the global effort table (low=10, medium=20, max=unlimited per item).
 
 Print at start: `"Multi-path mode: N targets. Effort: LEVEL (X reads per target)"`
 Single-file and line-range items count as 1 read each regardless of effort level.
@@ -220,18 +215,18 @@ Not all phases apply to every input mode. Skipped phases are irrelevant for that
 
 ## Global read budget
 
-Read budget is set by `EFFORT_LEVEL`:
+**Single effort table (referenced everywhere — this is the only definition):**
 
-| Effort | Read budget | Chain trace depth | Notes |
-|---|---|---|---|
-| `low` | 5 files | 3 hops | Grep-only where possible |
-| `medium` | 15 files | 8 hops | Default |
-| `high` | 25 files | 15 hops | DI resolution + abstract tracing |
-| `max` | **No cap** | Unlimited | Reads everything in the chain |
+| Effort | Read budget | Chain trace hops |
+|---|---|---|
+| `low` | 10 files | 5 hops |
+| `medium` (default) | 20 files | 12 hops |
+| `max` | **No cap** | Unlimited |
 
-**Multi-path override:** In multi-path mode, each item gets its own budget based on effort level. `low`=5, `medium`=15, `high`=25, `max`=unlimited per item.
+**Multi-path:** Each item gets its own budget from this table.
+**Auto-decompose:** At `max`, no subdirectory split (one unit). At `low`/`medium`, budget is divided proportionally across subdirectories.
 
-If at any point the running total reaches the active budget (for levels with a cap), **stop reading** and generate diagrams from what you have. Note: `"Read budget reached (EFFORT level). For deeper analysis, use a higher effort level."`
+If the running total reaches the budget cap, **stop reading** and note: `"Read budget reached (EFFORT level). Use effort=max for unlimited."`
 
 ---
 
@@ -284,13 +279,9 @@ If at any point the running total reaches the active budget (for levels with a c
 
 3. **Flat directory fallback:** If fewer than 2 top-level subdirectories, fall back to the 50–99 file strategy.
 
-4. **Read budget per subdirectory (from `EFFORT_LEVEL`):**
-
-   | Effort | Budget per subdirectory |
-   |---|---|
-   | `low` | `floor(5 × subdir_files / total_files)`, min 1 |
-   | `medium` | `floor(15 × subdir_files / total_files)`, min 2 |
-   | `high` | 25 per subdirectory (no proportional split) |
+4. **Read budget per subdirectory:** From the global effort table, divided proportionally.
+   - `low`: `floor(10 × subdir_files / total_files)`, min 1
+   - `medium`: `floor(20 × subdir_files / total_files)`, min 2
 
 5. Process each subdirectory independently. Each gets its own diagram set.
 
@@ -673,66 +664,45 @@ This applies to ALL diagram types across all input modes.
 #### CLASS DIAGRAM
 - Read Tier 1 files (foundational — abstract classes, heavily-inherited contracts)
 - Read Tier 2 DI registry files (to confirm what implements what)
-- At `high`/`max`: also read concrete implementors of abstract classes found in Tier 1
+- Read concrete implementors of abstract classes found in Tier 1
 
-#### SEQUENCE DIAGRAM — effort-aware chain trace
+#### SEQUENCE DIAGRAM — 5-step chain trace (unconditional)
 
-**Base chain trace (all effort levels):**
-1. Identify the entry point (screen / controller / main handler) via grep
-2. Read it → find the first outbound method call or function call
-3. Grep for the called class/function → identify its file → read it
-4. Repeat until you hit an HTTP call, external SDK, or data store boundary
-5. Do NOT read sideways (sibling classes not in the call chain)
+**These 5 steps ALWAYS execute at every effort level. No conditions, no "if high/max".**
 
-**Additional steps at `high` and `max` effort — abstract resolution:**
+1. **Read entry point** — identify the screen / controller / main handler via grep, read it
+2. **Follow the call** — find the first outbound method call, grep for the called class, read its file
+3. **Resolve abstracts** — if the class is abstract/interface/protocol/trait:
+   - First check DI registry files for a concrete binding:
+     ```
+     DART (GetIt):     registerSingleton<AbstractType>(() => ConcreteImpl())
+     JAVA/KOTLIN:      @Binds abstract fun bind(impl: ConcreteImpl): AbstractType
+     SPRING:           @Bean public AbstractType name() { return new ConcreteImpl(); }
+     TS/NESTJS:        { provide: AbstractType, useClass: ConcreteImpl }
+     ```
+   - If no DI binding: grep `extends AbstractClassName` / `implements AbstractClassName` to find concrete class
+   - Read the concrete class, continue from there
+   - If multiple found: read the most likely, note others
+4. **Resolve mixins/composition** — if the class has composition attachments:
+   ```
+   DART:      with MixinA, MixinB → grep `mixin MixinA`, read it, include its methods
+   KOTLIN:    by delegateImpl → grep for delegate class, read it
+   PYTHON:    class Foo(MixinA, MixinB, Base) → read each mixin
+   ```
+5. **Repeat** steps 2-4 until you hit an HTTP call, external SDK, data store, or the read budget
 
-When the chain trace encounters an abstract class, interface, protocol, or trait:
+**Do NOT read sideways** (sibling classes not in the call chain).
 
-**Step A — DI registry resolution (try first):**
-Check the DI registry files (already read as Tier 1/2) for a binding that maps the abstract to a concrete:
-```
-DART (GetIt):     registerSingleton<AbstractType>(() => ConcreteImpl())
-JAVA/KOTLIN:      @Binds abstract fun bind(impl: ConcreteImpl): AbstractType
-SPRING:           @Bean public AbstractType name() { return new ConcreteImpl(); }
-TS/NESTJS:        { provide: AbstractType, useClass: ConcreteImpl }
-PYTHON:           container.register(AbstractType, ConcreteImpl)
-```
-If found → read the concrete class file, continue tracing from there.
+If abstract resolution fails at any step (no DI binding, no concrete class), note in diagram:
+`"Abstract boundary — concrete impl not statically resolvable"`
 
-**Step B — Inheritance search (fallback if no DI binding):**
-Grep across the codebase for concrete implementors:
-```
-DART:      extends\s+AbstractClassName|implements\s+AbstractClassName
-JAVA/KT:   extends\s+AbstractClassName|implements\s+AbstractClassName|:\s*AbstractClassName
-TS/JS:     extends\s+AbstractClassName|implements\s+AbstractClassName
-PYTHON:    class\s+\w+\s*\(\s*AbstractClassName
-GO:        (find structs with matching method signatures)
-SWIFT:     :\s*AbstractClassName
-RUST:      impl\s+AbstractClassName\s+for\s+\w+
-```
-If one found → read it, continue. If multiple → read the most likely (by file naming convention or DI context), note others.
+**Effort only controls the budget and hop limit:**
 
-**Step C — Mixin/composition resolution (high/max only):**
-When a class in the chain has composition attachments:
-```
-DART:      with MixinA, MixinB → grep for `mixin MixinA`, read it, include its methods
-KOTLIN:    by delegateImpl → grep for the delegate class, read it
-PYTHON:    class Foo(MixinA, MixinB, Base) → read each mixin
-```
-At `max`: follow mixin-of-mixin chains. At `high`: one level of mixin resolution.
-
-**Unresolvable boundaries (`max` only):**
-If abstract resolution fails (no DI binding, no concrete class found), note in the diagram:
-`"Abstract boundary — ConcreteImpl not statically resolvable (runtime DI/factory)"`
-
-**Effort-specific chain trace limits:**
-
-| Effort | Max hops | Abstract resolution | Mixin resolution | Cross-boundary |
-|---|---|---|---|---|
-| `low` | 3 | No | No | No |
-| `medium` | 8 | Tier 1 only (read but don't search) | Identified, not traced | No |
-| `high` | 15 | DI registry + inheritance grep | Read mixin files, 1 level | 1 level up |
-| `max` | Unlimited | Full DI graph + all implementors | Mixin-of-mixin | 2 levels up |
+| Effort | Max hops | Max reads | Cross-boundary |
+|---|---|---|---|
+| `low` | 5 | 10 | No |
+| `medium` | 12 | 20 | 1 level up |
+| `max` | Unlimited | No cap | 2 levels up |
 
 #### COMPONENT DIAGRAM — zero reads
 Import statements + HTTP patterns from grep tell you everything about external dependencies.
@@ -959,7 +929,7 @@ After the diagrams, add a brief **Key Insights** section (bullet points, tailore
 - Paradigm detected and confidence level (e.g. "OOP — 20 class declarations, 2 abstract contracts, high confidence")
 - Total entities found and distribution across layers
 - External APIs/services the feature depends on
-- Read budget usage (e.g. "12 of 15 reads used (medium effort)" or "18 of 25 reads used (high effort)")
+- Read budget usage (e.g. "14 of 20 reads used (medium effort)" or "unlimited reads used (max effort)")
 
 **For OOP:**
 - Architectural layer violations spotted
@@ -986,7 +956,7 @@ After the diagrams, add a brief **Key Insights** section (bullet points, tailore
 
 - **Never invent** entity names, method names, or relationships not found in the code
 - **Never apply OOP diagram patterns to a component or functional codebase** — use the correct paradigm strategy
-- **Never exceed the effort level's read budget** (low=5, medium=15, high=25, max=unlimited) — note when budget is hit
+- **Never exceed the effort level's read budget** (low=10, medium=20, max=unlimited) — note when budget is hit
 - If a directory has no source files, say so and stop
 - If the path doesn't exist, report it and stop
 - Keep each diagram focused — **30 nodes max** per diagram; split into sub-diagrams if larger
