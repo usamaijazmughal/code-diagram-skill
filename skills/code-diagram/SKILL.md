@@ -99,11 +99,14 @@ If the extension is valid:
 - Check `LINE_FROM` < `LINE_TO`
 - Check `LINE_TO` does not exceed the file's total line count
 
-**Analysis:**
-1. Read only lines `LINE_FROM` through `LINE_TO` of the file
-2. Detect language from extension, paradigm from content within the range
-3. Generate diagrams for only the entities found within those lines
-4. Note in output: `"Line range analysis (lines FROM-TO of file.dart) — entities outside this range are not shown."`
+**Analysis (like single-file mode — skip Phases 1, 1.5, and 2.5):**
+1. Skip Phase 1 Glob — target is known
+2. Read only lines `LINE_FROM` through `LINE_TO` of the file
+3. Skip Phase 1.5 — detect language from extension, paradigm from content within the range
+4. Run Phase 2 grep on the extracted range only
+5. Skip Phase 2.5 — no cross-file scoring (single range)
+6. Generate diagrams for only the entities found within those lines
+7. Note in output: `"Line range analysis (lines FROM-TO of file.dart) — entities outside this range are not shown."`
 
 **Edge case:** If a class declaration starts within the range but its body extends beyond: show what's visible and note `"Class X starts at line N but may extend beyond line TO. Showing visible portion."`
 
@@ -111,7 +114,7 @@ If the extension is valid:
 
 **Syntax:** `[path1, path2, path3, ...]`
 
-**Parsing:** If input starts with `[`, collect everything until `]`. Split by `,` and trim whitespace. Each item is independently classified:
+**Parsing:** If `$ARGUMENTS` starts with `[`, scan the **full argument string** (not individual space-separated tokens) to find the matching `]`. Everything between `[` and `]` is the path list. Split by `,` and trim whitespace. Tokens after `]` are parsed as `DIAGRAM_TYPE` and `FLOW_MODE`. Each item in the list is independently classified:
 - Item is a directory → directory mode for that item
 - Item is a file path → single-file mode for that item
 - Item contains `:digits-digits` → line range mode for that item
@@ -150,6 +153,8 @@ Which mode? (1/2, default: 1)
 Wait for user response. Default: Balanced.
 Single-file and line-range items count as 1 read each and are not affected by budget choice.
 
+**Auto-decompose within multi-path:** If a directory item in the list has 100+ files, auto-decompose triggers for that item. The item's allocated budget (e.g. 15 in balanced) is divided across its subdirectories using auto-decompose's proportional logic. Example: payments/ has 150 files and gets 15 reads → data/ gets 4, domain/ gets 3, presentation/ gets 6, di/ gets 2.
+
 **Analysis flow:**
 1. Run Phase 1 (discovery) on each item independently per its mode
 2. Merge entity lists. Run Phase 1.5 (paradigm) on the merged set
@@ -169,9 +174,12 @@ Single-file and line-range items count as 1 read each and are not affected by bu
 **Step 1 — Search for the code in the current project:**
 Grep the first distinctive line (non-blank, non-comment, non-import) of the pasted code across the current working directory.
 
-**Step 2a — If found in project:**
+**Step 2a — If found in project (single match):**
 Print: `"Found this code in <file_path> (lines N-M). Analyzing with full project context."`
 Switch to line-range mode with the resolved file path and line numbers. Proceed normally.
+
+**Step 2a — If found in project (multiple matches):**
+Print: `"Found this code in multiple files:"` followed by a numbered list of matching files with line numbers. Ask the user: `"Which file? (enter number)"`. Switch to line-range mode with the user's chosen file.
 
 **Step 2b — If NOT found in project:**
 Print a warning and recommendation:
@@ -194,9 +202,29 @@ If user chooses 2 (proceed): analyze the pasted code in isolation — treat it l
 
 ---
 
+## Phase applicability per input mode
+
+Not all phases apply to every input mode. Skipped phases are irrelevant for that mode (not missing — there's nothing for them to do).
+
+| Phase | Directory | Single file | Line range | Multi-path | Pasted code |
+|---|---|---|---|---|---|
+| **1 — Discovery** | Glob all files | Skip (have the file) | Skip (have the range) | Per item | Skip |
+| **1.5 — Paradigm** | 3 probe greps | Skip (detect from content) | Skip (detect from content) | On merged set | Detect from syntax |
+| **2 — Grep scan** | All files | On the one file | On the extracted range | Per item | On pasted content |
+| **2.5 — Scoring** | Tier 1/2/3 | Skip (1 file) | Skip (1 range) | Per item within budget | Skip |
+| **3 — Reading** | Budget-controlled | Read the 1 file | Read the range | Per item within budget | Already have content |
+| **4 — Diagrams** | All types | All types | All types | All types + cross-refs | All types |
+| **5 — Insights** | Full | Lite (no hotspots) | Lite (no hotspots) | Full + per-item + cross-refs | Lite (limited context) |
+
+**"Lite" insights** means: paradigm, entity count, and external deps are reported, but cross-file metrics (hotspots, violations, circular deps) cannot be computed from a single file/range.
+
+---
+
 ## Global read budget
 
-**MAX_FULL_READS = 20 per invocation.** This is a single shared pool across all phases.
+**Default: MAX_FULL_READS = 20 per invocation.** This applies to directory mode, single-file mode, line-range mode, and pasted code mode.
+
+**Override for multi-path mode:** When multi-path is active, the budget per item is set by the user's balanced/deep choice (see Multi-path mode section). The global 20 does NOT apply — the multi-path budget supersedes it.
 
 | Consumer | Typical allocation | Notes |
 |---|---|---|
@@ -205,7 +233,7 @@ If user chooses 2 (proceed): analyze the pasted code in isolation — treat it l
 | DI / entry point files (Phase 3) | 2–3 | Module registries, main files |
 | **Remaining for overflow** | whatever's left | |
 
-If at any point the running total reaches 20, **stop reading** and generate diagrams from what you have. Note in the output: `"Read budget reached (20 files). Diagram may be incomplete for very large features — use split mode or narrow the target path."`
+If at any point the running total reaches the active budget, **stop reading** and generate diagrams from what you have. Note in the output: `"Read budget reached. Diagram may be incomplete — use split mode or narrow the target path."`
 
 ---
 
@@ -623,12 +651,15 @@ Read Tier 1 files + sequence chain-trace files. Component and arch diagrams are 
 
 ### Scale rules
 
-| File count | Strategy |
-|---|---|
-| 1 | Single-file mode (skip Glob, read directly) |
-| 2–49 | Standard analysis — full read budget available |
-| 50–99 | Print: `"Large feature (N files). Grep-first strategy."` — auto-split class diagrams by layer, sequence traces happy-path only, monitor read budget |
-| 100+ | **Auto-decompose mode** (handled in Phase 1) — each subdirectory analyzed independently, integration diagram at the end |
+| Input mode | Scale | Strategy |
+|---|---|---|
+| **Directory** — 1-49 files | Small | Standard — full read budget |
+| **Directory** — 50-99 files | Medium | Grep-first, auto-split class diagrams, happy-path sequence only |
+| **Directory** — 100+ files | Large | Auto-decompose by subdirectory, integration diagram at end |
+| **Single file** | — | Read the file directly, focused diagrams |
+| **Line range** | — | Read the range only, focused diagrams |
+| **Multi-path** | Per item | Each item follows its own scale rule based on its type and size |
+| **Pasted code** | — | Analyze in isolation or resolve to line-range if found in project |
 
 ---
 
@@ -804,6 +835,11 @@ After the diagrams, add a brief **Key Insights** section (bullet points, tailore
 **For Functional:**
 - Modules with the most inbound calls (hotspot)
 - Side-effect functions mixed into pure logic layers
+
+**For Multi-path mode (additional):**
+- Per-item summary: entities found, reads used, paradigm per item
+- Cross-path relationships: which items import from which, connection points
+- Items with no cross-references noted as "independent"
 
 ---
 
