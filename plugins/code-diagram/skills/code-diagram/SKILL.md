@@ -2,7 +2,7 @@
 name: code-diagram
 version: 1.0.2
 description: Analyzes source code and generates Mermaid diagrams. Accepts a directory, file, @reference, line range (path:10-50), multiple targets ([path1, path2]), or pasted code. Supports class, sequence, component, and architecture diagrams for Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust.
-argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split]"
+argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split] [rich] [deep]"
 allowed-tools: Glob Grep Read
 ---
 
@@ -12,7 +12,7 @@ You are a code analysis expert. Your job is to analyze real source code and gene
 
 Parse `$ARGUMENTS`:
 - If `$ARGUMENTS` is empty or blank → print usage help and stop:
-  `"Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split]"`
+  `"Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split] [rich] [deep]"`
 
 ### Step 1 — Detect input mode (check in this exact order)
 
@@ -25,25 +25,36 @@ Parse `$ARGUMENTS`:
 | 5th | First token is a valid directory path | **Directory mode** (existing behavior) |
 | 6th | None of the above | **Pasted code mode** |
 
-### Step 2 — Parse remaining tokens
+### Step 2 — Parse remaining tokens (flags can appear in any order)
 
-After extracting the input (which may consume 1 or more tokens), parse:
-- Next token (optional) → `DIAGRAM_TYPE` or `FLOW_MODE`:
-  - If it is `full` or `split` → treat it as `FLOW_MODE`, default `DIAGRAM_TYPE` to `all`
-  - If it is `class`, `sequence`, `component`, `arch`, or `all` → treat it as `DIAGRAM_TYPE`
-  - Otherwise → invalid, trigger validation error
-- Next token (optional) → `FLOW_MODE`: `full` or `split`. Default: `full`
+After extracting the input, scan ALL remaining tokens. Each token is matched independently:
+- `class`, `sequence`, `component`, `arch`, or `all` → `DIAGRAM_TYPE`. Default: `all`
+- `full` or `split` → `FLOW_MODE`. Default: `full`
+- `rich` → `DETAIL_LEVEL` = `rich` (show endpoints, operations, targets)
+- `deep` → `BUDGET_MODE` = `deep` (20 reads per target)
+
+If a token doesn't match any of the above → validation error.
+
+**Defaults (when flags are absent):**
+- `DIAGRAM_TYPE` = `all`
+- `FLOW_MODE` = `full`
+- `DETAIL_LEVEL` = `method-names` (secure — no endpoints, no operation details shown)
+- `BUDGET_MODE` = `balanced` (proportional reads, cheaper)
 
 ### Valid examples
 
 ```
-/code-diagram lib/app                                    # directory mode
+/code-diagram lib/app                                    # all diagrams, full, method-names, balanced
 /code-diagram lib/auth/bloc.dart                         # single-file mode
 /code-diagram @auth_bloc.dart                            # @ reference (resolved by Claude Code)
-/code-diagram lib/auth/bloc.dart:10-50 class             # line range mode
-/code-diagram [lib/auth, lib/payments] sequence           # multi-path mode
+/code-diagram lib/auth/bloc.dart:10-50 class             # line range, class diagram only
+/code-diagram [lib/auth, lib/payments] sequence           # multi-path, sequence only
 /code-diagram [lib/auth, lib/pay/bloc.dart, @file.dart]  # multi-path mixed types
-/code-diagram lib/app sequence split                     # directory + diagram type + flow mode
+/code-diagram lib/app sequence split                     # split mode
+/code-diagram lib/app sequence rich                      # rich details (endpoints, operations)
+/code-diagram lib/app sequence split rich                # split + rich
+/code-diagram [lib/auth, lib/payments] deep              # multi-path, full budget per target
+/code-diagram lib/app all split rich deep                # everything explicit
 ```
 
 ### FLOW_MODE behavior per diagram type
@@ -123,24 +134,9 @@ If the extension is valid:
 
 **Validation:** Each item is validated individually. If any item fails validation (path not found, unsupported type), report which item failed and continue with the remaining valid items.
 
-**Read budget — user chooses before analysis starts:**
+**Read budget (determined by `BUDGET_MODE` flag):**
 
-When multi-path mode is detected with 2+ items, BEFORE starting any analysis, present the budget choice:
-
-```
-Multi-path mode: N targets detected.
-
-Budget options:
-  1. Balanced (recommended) — X reads per target, Y total.
-     Cheaper. Slightly less depth on larger directories.
-
-  2. Deep — 20 reads per target, Z total.
-     Full depth for all targets. More expensive.
-
-Which mode? (1/2, default: 1)
-```
-
-**Balanced budget table:**
+**Balanced (default — no `deep` flag):**
 
 | List size | Budget per item | Total max |
 |---|---|---|
@@ -149,10 +145,10 @@ Which mode? (1/2, default: 1)
 | 4-5 items | 10 each | 40-50 |
 | 6+ items | 8 each | 48+ |
 
-**Deep:** 20 reads per item regardless of list size.
+**Deep (when `deep` flag is present):** 20 reads per item regardless of list size.
 
-Wait for user response. Default: Balanced.
-Single-file and line-range items count as 1 read each and are not affected by budget choice.
+Print at start: `"Multi-path mode: N targets. Budget: balanced (X per target)" or "... deep (20 per target)"`
+Single-file and line-range items count as 1 read each and are not affected by budget mode.
 
 **Auto-decompose within multi-path:** If a directory item in the list has 100+ files, auto-decompose triggers for that item. The item's allocated budget (e.g. 15 in balanced) is divided across its subdirectories using auto-decompose's proportional logic. Example: payments/ has 150 files and gets 15 reads → data/ gets 4, domain/ gets 3, presentation/ gets 6, di/ gets 2.
 
@@ -180,26 +176,17 @@ Print: `"Found this code in <file_path> (lines N-M). Analyzing with full project
 Switch to line-range mode with the resolved file path and line numbers. Proceed normally.
 
 **Step 2a — If found in project (multiple matches):**
-Print: `"Found this code in multiple files:"` followed by a numbered list of matching files with line numbers. Ask the user: `"Which file? (enter number)"`. Switch to line-range mode with the user's chosen file.
+Print: `"Found this code in multiple files:"` followed by a numbered list of matching files with line numbers. Use the **first match** (most likely the primary source). Note: `"Using <file_path>. If this is wrong, use /code-diagram path:from-to to target the correct file."`
 
 **Step 2b — If NOT found in project:**
-Print a warning and recommendation:
+Print a warning and proceed with limited analysis (no interactive prompt):
 ```
-"This code was not found in the current project.
-
-⚠ Analysis will have limited context — cross-file relationships cannot be resolved.
-⚠ Scanning the full project for context is expensive.
-
-Recommended: use '/code-diagram path/to/file.dart:from-to' syntax instead (cancel).
-
-  1. Cancel (recommended) — use path:from-to for cost-effective results
-  2. Proceed anyway — analyze with limited context
-
-Which option? (1/2, default: 1)"
+"⚠ This code was not found in the current project.
+Analysis will have limited context — cross-file relationships cannot be resolved.
+Tip: For better results, use '/code-diagram path/to/file.dart:from-to' syntax."
 ```
 
-If user chooses 1 (cancel): stop and show the usage hint.
-If user chooses 2 (proceed): analyze the pasted code in isolation — treat it like a virtual single file. Detect language from syntax patterns (keywords like `class`, `def`, `func`, `fn`). Generate diagrams for only the entities visible in the pasted code. Note in output: `"Pasted code analysis — limited context, cross-file relationships not shown."`
+Then analyze the pasted code in isolation — treat it like a virtual single file. Detect language from syntax patterns (keywords like `class`, `def`, `func`, `fn`). Generate diagrams for only the entities visible in the pasted code. Note in output: `"Pasted code analysis — limited context, cross-file relationships not shown."`
 
 ---
 
@@ -213,7 +200,7 @@ Not all phases apply to every input mode. Skipped phases are irrelevant for that
 | **Paradigm Detection** | 3 probe greps | Skip (detect from content) | Skip (detect from content) | On merged set | Detect from syntax |
 | **Grep Scan** | All files | On the one file | On the extracted range | Per item | On pasted content |
 | **Structural Scoring** | Tier 1/2/3 | Skip (1 file) | Skip (1 range) | Per item within budget | Skip |
-| **Detail Level Prompt** | If Pass 3 found ops | If Pass 3 found ops | If Pass 3 found ops | If any item has ops | If Pass 3 found ops |
+| **Detail Level** | From `rich` flag | From `rich` flag | From `rich` flag | From `rich` flag | From `rich` flag |
 | **File Reading** | Budget-controlled | Read the 1 file | Read the range | Per item within budget | Already have content |
 | **Diagram Generation** | All types | All types | All types | All types + cross-refs | All types |
 | **Insights** | Full | Lite (no hotspots) | Lite (no hotspots) | Full + per-item + cross-refs | Lite (limited context) |
@@ -281,28 +268,13 @@ If the total source file count is **100 or more**, do NOT attempt to analyze the
 
 3. **Flat directory fallback:** If `TARGET_PATH` has fewer than 2 top-level subdirectories (all files are flat, or only 1 subdirectory), do NOT auto-decompose. Instead, fall back to the 50–99 file strategy: grep-first, auto-split class diagrams by layer, sequence traces happy-path only.
 
-4. **Read budget — user chooses before analysis starts:**
+4. **Read budget (determined by `BUDGET_MODE` flag):**
 
-   BEFORE processing subdirectories, present the budget choice:
+   **Balanced (default):** `floor(20 × subdir_files / total_files)` per subdirectory, minimum 2 each. Total must not exceed 20.
 
-   ```
-   Auto-decompose: N subdirectories detected.
+   **Deep (when `deep` flag is present):** 20 reads per subdirectory regardless of count.
 
-   Budget options:
-     1. Balanced (recommended) — budget split proportionally across subdirectories, 20 total reads.
-        Cheaper. Some subdirectories may get as few as 2-3 reads.
-
-     2. Deep — 20 reads per subdirectory, M total reads.
-        Full depth for all subdirectories. More expensive.
-
-   Which mode? (1/2, default: 1)
-   ```
-
-   **Balanced (option 1):** `floor(20 × subdir_files / total_files)` per subdirectory, minimum 2 each. Total across all subdirectories must not exceed 20 — if the sum exceeds 20, reduce smallest subdirectories to 1 read each until it fits.
-
-   **Deep (option 2):** 20 reads per subdirectory regardless of count.
-
-   Wait for user response. Default: Balanced.
+   Print at start: `"Auto-decompose: N subdirectories. Budget: balanced (20 total)" or "... deep (20 per subdir)"`
 
 5. Process **each subdirectory independently** — run Phases 1.5 through 4 separately per subdirectory. Each subdirectory gets its own:
    - Read budget from the user's choice above
@@ -672,32 +644,14 @@ TIER 3 (grep only):
 
 ---
 
-## Detail Level Prompt
+## Detail Level (determined by `rich` flag)
 
-**This happens AFTER all grep passes (including Pass 3) but BEFORE any file reading.** The user's choice is needed before the File Reading phase begins.
+**`DETAIL_LEVEL` is set by the `rich` flag in arguments. No interactive prompt.**
 
-When Pass 3 detects ANY external operations (HTTP endpoints, DB, cache, queue, etc.), ask the user ONCE:
+- **No `rich` flag (default):** `DETAIL_LEVEL` = `method-names`. Safe, secure. Only class/method names in diagram labels. Identical to v1.0.1 output.
+- **`rich` flag present:** `DETAIL_LEVEL` = `rich`. Shows endpoints, operation types, and targets. For internal/trusted use.
 
-```
-External operations detected (HTTP endpoints, database, cache, ...).
-
-Detail level for ALL diagrams:
-  1. Method names only (recommended) — safe to share externally
-     Example: Repository->>PaymentDataSource: createPayment()
-
-  2. Rich details — shows endpoints, operations, targets (internal use)
-     Example: Repository->>API: POST /api/v1/payments
-     Example: Service->>DB: WRITE transactions
-
-Which level? (1/2, default: 1)
-```
-
-Default is **method names** (secure). Rich is opt-in for internal/trusted contexts.
-Only show this prompt when external operations are actually found in grep results. If Pass 3 found nothing, skip entirely.
-
-**For line-range and single-file modes:** Pass 3 patterns are checked against the file content during Grep Scan. If external operations are found, this prompt STILL fires before diagram generation.
-
-Store the user's choice as `DETAIL_LEVEL` (`method-names` or `rich`) and apply it in the Diagram Generation phase across all diagram types.
+This applies to ALL diagram types across all input modes.
 
 ---
 

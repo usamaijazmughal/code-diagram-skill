@@ -79,15 +79,11 @@ Look for these 9 categories in the code:
 - **Analytics:** track(), logEvent(), mixpanel, amplitude
 - **Push Notifications:** FCM, OneSignal, APNs
 
-### Step 3.75 — Detail Level Prompt
+### Step 3.75 — Detail Level
 
-**Ask this BEFORE generating any diagrams.** When external operations are detected, ask the user:
-```
-Detail level for ALL diagrams:
-  1. Method names only (recommended) — safe to share externally
-  2. Rich details — endpoints, operations, targets (internal use)
-```
-Default: method names. Rich mode shows:
+If the user asks for "rich details", "show endpoints", or "with operations" → use rich mode. Otherwise default to method-names (secure).
+
+**Rich mode shows:**
 - HTTP: full endpoint paths, never truncated
 - DB: operation type + entity name only (`READ users`, `WRITE transactions`). **Never show query text, column names, filters, or schema.**
 - Cache/Queue/WS/Auth/Analytics/Push: compact operation + target (`GET user session`, `PUBLISH payment.completed`)

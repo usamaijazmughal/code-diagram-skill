@@ -17,9 +17,11 @@ Parse the user's input. Detect input mode (check in this order):
 | 5th | Valid directory path | **Directory** (existing) |
 | 6th | None of above | **Pasted code** |
 
-Then parse remaining tokens:
+Then parse remaining tokens (flags, any order):
 - `DIAGRAM_TYPE`: `class`, `sequence`, `component`, `arch`, `all` (default: `all`)
 - `FLOW_MODE`: `full` or `split` (default: `full`)
+- `rich` → `DETAIL_LEVEL` = rich (show endpoints, operations). Default: method-names (secure)
+- `deep` → `BUDGET_MODE` = deep (20 reads per target). Default: balanced (cheaper)
 
 FLOW_MODE behavior:
 
@@ -38,9 +40,7 @@ Syntax: `path/file.dart:10-50`. Read only that range. Note: "Entities outside th
 
 ### Multi-path mode
 Syntax: `[path1, path2, ...]`. Supports mixed types (directories, files, line ranges).
-Before starting, ask user to choose budget:
-- **Balanced** (recommended): scaled reads per item (2 items=15, 3=12, 4-5=10, 6+=8)
-- **Deep**: 20 reads per item
+Budget from `deep` flag: Balanced (default) = scaled reads (2 items=15, 3=12, 4-5=10, 6+=8). Deep = 20 per item.
 After analysis, detect cross-path imports. Connected paths get dashed arrows between subgraphs. Independent paths shown as separate sections.
 
 ### Pasted code mode
@@ -64,14 +64,7 @@ find $TARGET_PATH -type f \( -name "*.dart" -o -name "*.ts" -o -name "*.tsx" -o 
 Detect language from dominant extension. Print directory tree with file counts.
 
 ### Auto-decompose (100+ files)
-Split by top-level subdirectories. Before starting, ask the user:
-```
-Auto-decompose: N subdirectories detected.
-  1. Balanced (recommended) — budget split proportionally, 20 total reads. Cheaper.
-  2. Deep — 20 reads per subdirectory. Full depth, more expensive.
-Which mode? (1/2, default: 1)
-```
-Balanced: divide 20 proportionally (min 2 per subdir). Deep: 20 per subdir.
+Split by top-level subdirectories. Budget from `deep` flag: Balanced (default) = divide 20 proportionally (min 2 per subdir). Deep = 20 per subdir.
 Generate integration diagram at end. If < 2 subdirectories: fall back to grep-first strategy.
 
 ## Paradigm Detection
@@ -152,17 +145,11 @@ Run 3 composite greps in parallel:
 
 Confirm against imports. `.find()` + prisma import = DB. `.find()` without DB import = array method.
 
-## Detail Level Prompt
+## Detail Level (from `rich` flag — no interactive prompt)
 
-**This happens AFTER all grep passes but BEFORE any file reading.**
-
-When external operations detected, ask once:
-```
-  1. Method names only (recommended) — safe to share
-  2. Rich details — endpoints, operations, targets (internal use)
-Which? (1/2, default: 1)
-```
-Rich: full endpoints, `READ/WRITE entity` for DB. **DB security: never show query text, column names, filters, or schema.** Compact ops for cache/queue/auth/analytics/push.
+`DETAIL_LEVEL` from the `rich` flag. No prompting.
+- Default (no flag): `method-names` — safe, secure
+- With `rich`: full endpoints, `READ/WRITE entity` for DB. **DB security: never show query text, column names, filters, or schema.** Compact ops for cache/queue/auth/analytics/push.
 Method-names: identical to v1.0.1.
 Applies to ALL diagram types.
 

@@ -43,7 +43,7 @@ Restart your tool after installing. For Claude Code, type `/code-diagram` and it
 
 ---
 
-## Input Modes
+## Input Modes & Flags
 
 ```bash
 /code-diagram lib/features/payments                      # directory
@@ -51,16 +51,23 @@ Restart your tool after installing. For Claude Code, type `/code-diagram` and it
 /code-diagram @auth_bloc.dart                            # @ reference
 /code-diagram lib/auth/bloc.dart:10-50 class             # line range
 /code-diagram [lib/auth, lib/payments] sequence           # multiple targets
-/code-diagram [lib/auth, lib/pay/bloc.dart, @file.dart]  # mixed types
+/code-diagram lib/app sequence rich                      # show endpoints + operations
+/code-diagram [lib/auth, lib/payments] deep              # full budget per target
+/code-diagram lib/app all split rich deep                # everything explicit
 ```
 
-| Mode | When to use |
+| Input mode | When to use |
 |---|---|
 | **Directory** | Analyze a full feature or module |
 | **Single file** | Focus on one file's internals |
 | **Line range** `path:10-50` | Diagram a specific method or class block |
 | **Multi-path** `[a, b, c]` | Compare or connect multiple features |
 | **Pasted code** | Quick diagram from code in your clipboard |
+
+| Flag | What it does | Default |
+|---|---|---|
+| `rich` | Show endpoints, DB entities, operations in diagram labels | Off (method-names only, secure) |
+| `deep` | Full 20 reads per target in multi-path/auto-decompose | Off (balanced, cheaper) |
 
 ---
 
@@ -125,14 +132,14 @@ Each diagram adapts to the detected paradigm:
 | **100+ files** | Auto-decompose by subdirectory + integration diagram |
 | **Multi-path** | Per-item budget, cross-path relationship detection |
 
-When the budget is scaled down (100+ files or multi-path), the skill asks you to choose:
+When the budget is scaled down (100+ files or multi-path), add the `deep` flag for full depth:
 
+```bash
+/code-diagram lib/features/payments deep          # 20 reads per subdirectory
+/code-diagram [lib/auth, lib/payments] deep        # 20 reads per target
 ```
-Budget options:
-  1. Balanced (recommended) — proportional reads, cheaper
-  2. Deep — 20 reads per target, full depth, more expensive
-Which mode? (1/2, default: 1)
-```
+
+Without `deep`, balanced mode is used automatically (cheaper, proportional reads).
 
 ---
 

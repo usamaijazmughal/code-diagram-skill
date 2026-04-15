@@ -14,21 +14,17 @@ Extract from the user's message and detect which mode applies (check in order):
 | **Directory** | User points at a directory | "Analyze lib/features/payments" |
 | **Pasted code** | User pastes raw code | "Diagram this: class Foo { ... }" |
 
-Also extract:
+Also extract flags (can appear in any order in the user's request):
 - `DIAGRAM_TYPE` — `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
 - `FLOW_MODE` — `full` or `split` (default: `full`)
+- `DETAIL_LEVEL` — if user says "rich" or "with details" or "show endpoints" → `rich`. Otherwise → `method-names` (default, secure)
+- `BUDGET_MODE` — if user says "deep" or "full depth" → `deep`. Otherwise → `balanced` (default, cheaper)
 
 ### File type validation
 If the target is a single file, check its extension: `.dart`, `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.kt`, `.java`, `.go`, `.swift`, `.rs`, `.svelte`. If unsupported, tell the user: "Unsupported file type. Please point at a source code file or directory."
 
 ### Multi-path mode
-When multiple targets are provided, ask the user before starting:
-```
-Multi-path mode: N targets detected.
-  1. Balanced (recommended) — fewer reads per target, cheaper
-  2. Deep — full 20 reads per target, more expensive
-Which mode?
-```
+When multiple targets are provided, budget is from `BUDGET_MODE` flag: Balanced (default) = scaled reads per target. Deep = 20 per target.
 Process each target independently, then check for cross-path imports to draw connections between subgraphs.
 
 ### Line range mode
@@ -67,14 +63,8 @@ Detect language from dominant extension. Count files per subdirectory.
 If zero files found: report and stop.
 
 ### Auto-decompose (100+ files)
-If 100+ files: split by top-level subdirectories. Before starting, ask the user:
-```
-Auto-decompose: N subdirectories detected.
-  1. Balanced (recommended) — budget split proportionally, 20 total reads. Cheaper.
-  2. Deep — 20 reads per subdirectory. Full depth, more expensive.
-Which mode? (1/2, default: 1)
-```
-Balanced: divide 20 proportionally (min 2 per subdir). Deep: 20 per subdir.
+If 100+ files: split by top-level subdirectories.
+Budget from `BUDGET_MODE` flag: Balanced (default) = divide 20 proportionally (min 2 per subdir). Deep = 20 per subdir.
 Analyze each independently, generate integration diagram at the end.
 
 If fewer than 2 subdirectories: fall back to grep-first strategy for 50-99 file features.
@@ -168,17 +158,11 @@ Run 3 composite greps in parallel with Pass 1 and Pass 2:
 
 Confirm against imports — `.find()` importing prisma = DB. `.find()` with no DB import = array method.
 
-## Detail Level Prompt
+## Detail Level (from `rich` flag — no interactive prompt)
 
-**This happens AFTER all grep passes but BEFORE any file reading.**
-
-When external operations are detected, ask before reading or generating:
-```
-Detail level for ALL diagrams:
-  1. Method names only (recommended) — safe to share externally
-  2. Rich details — endpoints, operations, targets (internal use)
-Which level? (1/2, default: 1)
-```
+`DETAIL_LEVEL` is determined by the `rich` flag. No prompting needed.
+- Default (no flag): `method-names` — safe, secure, only class/method names
+- With `rich`: shows endpoints, operations, targets
 
 **Rich mode rules:**
 - HTTP: full endpoint path, never truncate
