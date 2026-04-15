@@ -15,7 +15,7 @@ Works with **Claude Code** | **Cursor** | **Gemini CLI** | ChatGPT (experimental
 <tr><td><b>Claude Code</b></td><td>
 
 ```
-/plugin marketplace add usamaijazmughal/code-diagram-skill
+/plugin marketplace add usamaijazmughal/code-diagram
 /plugin install code-diagram
 ```
 Then: `/code-diagram lib/features/payments`
@@ -24,7 +24,7 @@ Then: `/code-diagram lib/features/payments`
 <tr><td><b>Cursor</b></td><td>
 
 ```bash
-curl -o .cursorrules https://raw.githubusercontent.com/usamaijazmughal/code-diagram-skill/main/cursor/.cursorrules
+curl -o .cursorrules https://raw.githubusercontent.com/usamaijazmughal/code-diagram/main/cursor/.cursorrules
 ```
 Then ask: *"Analyze lib/features/payments and generate diagrams"*
 
@@ -32,7 +32,7 @@ Then ask: *"Analyze lib/features/payments and generate diagrams"*
 <tr><td><b>Gemini CLI</b></td><td>
 
 ```bash
-mkdir -p .gemini/commands && curl -o .gemini/commands/code-diagram.md https://raw.githubusercontent.com/usamaijazmughal/code-diagram-skill/main/gemini/.gemini/commands/code-diagram.md
+mkdir -p .gemini/commands && curl -o .gemini/commands/code-diagram.md https://raw.githubusercontent.com/usamaijazmughal/code-diagram/main/gemini/.gemini/commands/code-diagram.md
 ```
 Then: `/code-diagram lib/features/payments`
 
@@ -216,7 +216,7 @@ Read budget usage: 12 of 20 file reads used
 
 ```bash
 curl -o ~/.claude/skills/code-diagram/SKILL.md \
-  https://raw.githubusercontent.com/usamaijazmughal/code-diagram-skill/main/skills/code-diagram/SKILL.md
+  https://raw.githubusercontent.com/usamaijazmughal/code-diagram/main/skills/code-diagram/SKILL.md
 ```
 Restart Claude Code after updating.
 
@@ -224,21 +224,21 @@ Restart Claude Code after updating.
 
 ```bash
 curl -o .cursorrules \
-  https://raw.githubusercontent.com/usamaijazmughal/code-diagram-skill/main/cursor/.cursorrules
+  https://raw.githubusercontent.com/usamaijazmughal/code-diagram/main/cursor/.cursorrules
 ```
 
 ### Gemini CLI
 
 ```bash
 curl -o .gemini/commands/code-diagram.md \
-  https://raw.githubusercontent.com/usamaijazmughal/code-diagram-skill/main/gemini/.gemini/commands/code-diagram.md
+  https://raw.githubusercontent.com/usamaijazmughal/code-diagram/main/gemini/.gemini/commands/code-diagram.md
 ```
 
 ### Check version
 
 The version is in the plugin metadata:
 - **Claude Code:** Check `plugins/code-diagram/.claude-plugin/plugin.json` or `.claude-plugin/marketplace.json`
-- **All tools:** Compare your local file with the [latest on GitHub](https://github.com/usamaijazmughal/code-diagram-skill/blob/main/plugins/code-diagram/.claude-plugin/plugin.json)
+- **All tools:** Compare your local file with the [latest on GitHub](https://github.com/usamaijazmughal/code-diagram/blob/main/plugins/code-diagram/.claude-plugin/plugin.json)
 
 Current version: **1.0.2**
 
@@ -288,7 +288,7 @@ Open an issue with: language, paradigm, feature size, and what was wrong.
 ## Repository Structure
 
 ```
-code-diagram-skill/
+code-diagram/
   skills/code-diagram/SKILL.md             # Claude Code (manual install)
   plugins/code-diagram/                     # Claude Code (marketplace install)
     .claude-plugin/plugin.json
