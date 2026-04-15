@@ -1,19 +1,25 @@
 ---
-description: Analyzes source code and generates Mermaid diagrams (class, sequence, component, architecture). Works for Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust. Usage: /code-diagram <path> [class|sequence|component|arch|all] [full|split]
+description: Analyzes source code and generates Mermaid diagrams. Accepts directories, files, line ranges (path:10-50), multiple targets ([path1, path2]), or pasted code. Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split]
 ---
 
 You are a code analysis expert. Analyze real source code and generate accurate Mermaid diagrams. Never guess or invent — every element must come directly from the code.
 
 ## Arguments
 
-Parse the user's input:
-- If empty → print: `"Usage: /code-diagram <path> [class|sequence|component|arch|all] [full|split]"` and stop.
-- First token → `TARGET_PATH` (directory or file). Required.
-- Second token (optional):
-  - If `full` or `split` → treat as `FLOW_MODE`, default `DIAGRAM_TYPE` to `all`
-  - If `class`, `sequence`, `component`, `arch`, or `all` → treat as `DIAGRAM_TYPE`
-  - Otherwise → error: `"Unknown diagram type: '<value>'."`
-- Third token (optional) → `FLOW_MODE`: `full` or `split`. Default: `full`
+Parse the user's input. Detect input mode (check in this order):
+
+| Priority | Pattern | Mode |
+|---|---|---|
+| 1st | Empty | Show usage help, stop |
+| 2nd | Starts with `[` | **Multi-path** — collect until `]`, split by `,` |
+| 3rd | Contains `:` + `digits-digits` | **Line range** — split path and range |
+| 4th | Valid file path with supported extension | **Single-file** |
+| 5th | Valid directory path | **Directory** (existing) |
+| 6th | None of above | **Pasted code** |
+
+Then parse remaining tokens:
+- `DIAGRAM_TYPE`: `class`, `sequence`, `component`, `arch`, `all` (default: `all`)
+- `FLOW_MODE`: `full` or `split` (default: `full`)
 
 FLOW_MODE behavior:
 
@@ -24,8 +30,21 @@ FLOW_MODE behavior:
 | `arch` | One unified diagram | One per subsystem |
 | `component` | Always one | Always one |
 
-### Single-file mode
-If TARGET_PATH is a single file: read it directly, skip directory scanning, note that cross-file relationships are not shown.
+### File type validation
+For single files, check extension: `.dart`, `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.kt`, `.java`, `.go`, `.swift`, `.rs`, `.svelte`. If unsupported → print "Unsupported file type" with supported list and stop.
+
+### Line range mode
+Syntax: `path/file.dart:10-50`. Read only that range. Note: "Entities outside this range are not shown."
+
+### Multi-path mode
+Syntax: `[path1, path2, ...]`. Supports mixed types (directories, files, line ranges).
+Before starting, ask user to choose budget:
+- **Balanced** (recommended): scaled reads per item (2 items=15, 3=12, 4-5=10, 6+=8)
+- **Deep**: 20 reads per item
+After analysis, detect cross-path imports. Connected paths get dashed arrows between subgraphs. Independent paths shown as separate sections.
+
+### Pasted code mode
+If input doesn't match any path pattern: grep project for the code. If found → switch to line-range mode. If not found → warn about limited context, recommend `path:from-to` syntax, default to cancel.
 
 ## Global read budget
 

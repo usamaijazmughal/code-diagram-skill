@@ -179,14 +179,36 @@ Same argument format as Claude Code. Gemini CLI uses shell commands (`rg`, `find
 ### Arguments
 
 ```
-/code-diagram <path> [diagram-type] [flow-mode]
+/code-diagram <input> [diagram-type] [flow-mode]
 ```
 
 | Argument | Values | Default | Required |
 |---|---|---|---|
-| `path` | Any file or directory path | — | Yes |
+| `input` | Directory, file, `@ref`, `path:10-50`, `[path1, path2]`, or pasted code | — | Yes |
 | `diagram-type` | `class`, `sequence`, `component`, `arch`, `all` | `all` | No |
 | `flow-mode` | `full`, `split` | `full` | No |
+
+### Input modes
+
+```bash
+# Directory (standard)
+/code-diagram lib/features/payments
+
+# Single file
+/code-diagram lib/auth/bloc.dart
+
+# @ reference (Claude Code resolves it)
+/code-diagram @auth_bloc.dart
+
+# Line range — only analyze lines 10-50
+/code-diagram lib/auth/bloc.dart:10-50 class
+
+# Multiple targets — mix of directories, files, @ references
+/code-diagram [lib/auth, lib/payments, @config.dart] sequence
+
+# Pasted code — auto-detects if it exists in the project
+/code-diagram class PaymentBloc extends Bloc { ... }
+```
 
 Smart argument parsing: if you skip the diagram type and go straight to flow mode, it works:
 

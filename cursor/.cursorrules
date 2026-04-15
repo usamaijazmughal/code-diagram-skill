@@ -1,11 +1,41 @@
 # Code Diagram Generator
 
-When the user asks you to generate diagrams, analyze code structure, or visualize architecture for a directory or file, follow this analysis pipeline. Use terminal commands (`rg`, `find`, `cat`) for all file operations.
+When the user asks you to generate diagrams, analyze code structure, or visualize architecture, follow this analysis pipeline. Use terminal commands (`rg`, `find`, `cat`) for all file operations.
 
-Extract from the user's message:
-- `TARGET_PATH` — the directory or file to analyze
+## Input modes
+
+Extract from the user's message and detect which mode applies (check in order):
+
+| Mode | When | Example |
+|---|---|---|
+| **Multi-path** | User mentions multiple files/directories | "Analyze lib/auth and lib/payments together" |
+| **Line range** | User specifies line numbers | "Diagram lines 10-50 of bloc.dart" |
+| **Single file** | User points at one file | "Analyze auth_bloc.dart" |
+| **Directory** | User points at a directory | "Analyze lib/features/payments" |
+| **Pasted code** | User pastes raw code | "Diagram this: class Foo { ... }" |
+
+Also extract:
 - `DIAGRAM_TYPE` — `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
 - `FLOW_MODE` — `full` or `split` (default: `full`)
+
+### File type validation
+If the target is a single file, check its extension: `.dart`, `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.kt`, `.java`, `.go`, `.swift`, `.rs`, `.svelte`. If unsupported, tell the user: "Unsupported file type. Please point at a source code file or directory."
+
+### Multi-path mode
+When multiple targets are provided, ask the user before starting:
+```
+Multi-path mode: N targets detected.
+  1. Balanced (recommended) — fewer reads per target, cheaper
+  2. Deep — full 20 reads per target, more expensive
+Which mode?
+```
+Process each target independently, then check for cross-path imports to draw connections between subgraphs.
+
+### Line range mode
+When user specifies lines (e.g., "lines 10-50 of file.dart"), read only that range. Note in output that entities outside the range are not shown.
+
+### Pasted code mode
+If user pastes code, grep the project to find if it exists. If found, switch to line-range mode. If not found, warn that analysis has limited context and recommend using a file path instead. Default to cancel; proceed only if user confirms.
 
 FLOW_MODE behavior per diagram type:
 

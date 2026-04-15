@@ -1,7 +1,7 @@
 ---
 name: code-diagram
-description: Analyzes a directory or file and generates Mermaid diagrams from actual source code. Supports class, sequence, component, and architecture diagrams. Works for Dart/Flutter, TypeScript/JavaScript, Python, Java, Kotlin, Go, Swift, Rust. Invoke as /code-diagram <path> [class|sequence|component|arch|all] [full|split]
-argument-hint: "<path> [class|sequence|component|arch|all] [full|split]"
+description: Analyzes source code and generates Mermaid diagrams. Accepts a directory, file, @reference, line range (path:10-50), multiple targets ([path1, path2]), or pasted code. Supports class, sequence, component, and architecture diagrams for Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust.
+argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split]"
 allowed-tools: Glob Grep Read
 ---
 
@@ -11,21 +11,41 @@ You are a code analysis expert. Your job is to analyze real source code and gene
 
 Parse `$ARGUMENTS`:
 - If `$ARGUMENTS` is empty or blank → print usage help and stop:
-  `"Usage: /code-diagram <path> [class|sequence|component|arch|all] [full|split]"`
-- First token → `TARGET_PATH` (directory or file). **Required.**
-- Second token (optional) → `DIAGRAM_TYPE` or `FLOW_MODE`:
+  `"Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split]"`
+
+### Step 1 — Detect input mode (check in this exact order)
+
+| Priority | Pattern | Mode |
+|---|---|---|
+| 1st | Empty/blank | Show usage help, stop |
+| 2nd | First token starts with `[` | **Multi-path mode** — collect everything until `]` |
+| 3rd | First token contains `:` followed by `\d+-\d+` | **Line range mode** — split into path + range |
+| 4th | First token is a valid file path with supported extension | **Single-file mode** |
+| 5th | First token is a valid directory path | **Directory mode** (existing behavior) |
+| 6th | None of the above | **Pasted code mode** |
+
+### Step 2 — Parse remaining tokens
+
+After extracting the input (which may consume 1 or more tokens), parse:
+- Next token (optional) → `DIAGRAM_TYPE` or `FLOW_MODE`:
   - If it is `full` or `split` → treat it as `FLOW_MODE`, default `DIAGRAM_TYPE` to `all`
   - If it is `class`, `sequence`, `component`, `arch`, or `all` → treat it as `DIAGRAM_TYPE`
   - Otherwise → invalid, trigger validation error
-- Third token (optional) → `FLOW_MODE`: `full` or `split`. Default: `full`
+- Next token (optional) → `FLOW_MODE`: `full` or `split`. Default: `full`
 
-This means all of these are valid:
-- `/code-diagram lib/app` → all diagrams, full mode
-- `/code-diagram lib/app sequence` → sequence only, full mode
-- `/code-diagram lib/app split` → all diagrams, split mode
-- `/code-diagram lib/app sequence split` → sequence only, split mode
+### Valid examples
 
-`FLOW_MODE` behavior per diagram type:
+```
+/code-diagram lib/app                                    # directory mode
+/code-diagram lib/auth/bloc.dart                         # single-file mode
+/code-diagram @auth_bloc.dart                            # @ reference (resolved by Claude Code)
+/code-diagram lib/auth/bloc.dart:10-50 class             # line range mode
+/code-diagram [lib/auth, lib/payments] sequence           # multi-path mode
+/code-diagram [lib/auth, lib/pay/bloc.dart, @file.dart]  # multi-path mixed types
+/code-diagram lib/app sequence split                     # directory + diagram type + flow mode
+```
+
+### FLOW_MODE behavior per diagram type
 
 | Diagram type | `full` (default) | `split` |
 |---|---|---|
@@ -42,17 +62,135 @@ If `DIAGRAM_TYPE` is not one of `class`, `sequence`, `component`, `arch`, or `al
 If `FLOW_MODE` is not `full` or `split`:
 → Print: `"Unknown flow mode: '<value>'. Valid modes: full, split."` and stop.
 
-If `TARGET_PATH` does not exist:
+If `TARGET_PATH` does not exist (directory or file modes):
 → Print: `"Path not found: '<value>'. Please provide a valid file or directory path."` and stop.
 
-### Single-file mode
+---
 
-If `TARGET_PATH` is a **single file** (not a directory):
+## Input Modes
+
+### Directory mode (existing)
+
+When `TARGET_PATH` is a directory. Proceed directly to Phase 1 Discovery. No changes to existing behavior.
+
+### Single-file mode (existing)
+
+When `TARGET_PATH` is a single file.
+
+**File type validation:** Check if the extension matches supported languages: `.dart`, `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.kt`, `.java`, `.go`, `.swift`, `.rs`, `.svelte`. If not:
+→ Print: `"Unsupported file type: '.<ext>'. Supported: .dart, .ts, .tsx, .js, .jsx, .py, .kt, .java, .go, .swift, .rs, .svelte."` followed by `"Tip: Point at a source code file or a directory containing source files."` and stop.
+
+If the extension is valid:
 1. Skip Phase 1 Glob — just read this one file
 2. Skip Phase 1.5 paradigm probes — detect language from extension, paradigm from file content
 3. Skip Phase 2.5 scoring — no cross-file analysis needed
 4. Generate diagrams scoped to that single file only (classes within it, methods within it)
 5. Note in output: `"Single-file analysis — cross-file relationships are not shown."`
+
+### Line range mode (new)
+
+**Syntax:** `path/to/file.dart:from-to` where `from` and `to` are line numbers.
+
+**Parsing:** Split on the last `:` that is followed by `\d+-\d+`. Extract `FILE_PATH` and `LINE_FROM`-`LINE_TO`.
+
+**Validation:**
+- Check file exists
+- Check file extension is supported (same list as single-file mode)
+- Check `LINE_FROM` < `LINE_TO`
+- Check `LINE_TO` does not exceed the file's total line count
+
+**Analysis:**
+1. Read only lines `LINE_FROM` through `LINE_TO` of the file
+2. Detect language from extension, paradigm from content within the range
+3. Generate diagrams for only the entities found within those lines
+4. Note in output: `"Line range analysis (lines FROM-TO of file.dart) — entities outside this range are not shown."`
+
+**Edge case:** If a class declaration starts within the range but its body extends beyond: show what's visible and note `"Class X starts at line N but may extend beyond line TO. Showing visible portion."`
+
+### Multi-path mode (new)
+
+**Syntax:** `[path1, path2, path3, ...]`
+
+**Parsing:** If input starts with `[`, collect everything until `]`. Split by `,` and trim whitespace. Each item is independently classified:
+- Item is a directory → directory mode for that item
+- Item is a file path → single-file mode for that item
+- Item contains `:digits-digits` → line range mode for that item
+- Item starts with `@` → resolved by Claude Code before the skill sees it (treated as file or directory)
+
+**Validation:** Each item is validated individually. If any item fails validation (path not found, unsupported type), report which item failed and continue with the remaining valid items.
+
+**Read budget — user chooses before analysis starts:**
+
+When multi-path mode is detected with 2+ items, BEFORE starting any analysis, present the budget choice:
+
+```
+Multi-path mode: N targets detected.
+
+Budget options:
+  1. Balanced (recommended) — X reads per target, Y total.
+     Cheaper. Slightly less depth on larger directories.
+
+  2. Deep — 20 reads per target, Z total.
+     Full depth for all targets. More expensive.
+
+Which mode? (1/2, default: 1)
+```
+
+**Balanced budget table:**
+
+| List size | Budget per item | Total max |
+|---|---|---|
+| 2 items | 15 each | 30 |
+| 3 items | 12 each | 36 |
+| 4-5 items | 10 each | 40-50 |
+| 6+ items | 8 each | 48+ |
+
+**Deep:** 20 reads per item regardless of list size.
+
+Wait for user response. Default: Balanced.
+Single-file and line-range items count as 1 read each and are not affected by budget choice.
+
+**Analysis flow:**
+1. Run Phase 1 (discovery) on each item independently per its mode
+2. Merge entity lists. Run Phase 1.5 (paradigm) on the merged set
+3. Run Phase 2 (grep) on each item. Run Phase 2.5 (scoring) per item within its budget
+4. **Cross-path relationship detection:** After all grep passes, check import patterns across items. If item A imports from item B → draw connection at the relation point. If no cross-path imports → mark as "independent"
+5. **Diagram output:**
+   - Each item gets a labeled `subgraph` (for graph diagrams) or `rect` section (for sequence)
+   - Cross-path relationships shown as dashed arrows (`-.->`) between subgraphs with the import/dependency label
+   - If no relationships: separate sections, each self-contained, noted as "independent — no cross-references detected"
+
+### Pasted code mode (new)
+
+**Detection:** Input doesn't match any of the above modes (not a path, not a bracket list, not a line range). Treat as pasted code.
+
+**3-step flow:**
+
+**Step 1 — Search for the code in the current project:**
+Grep the first distinctive line (non-blank, non-comment, non-import) of the pasted code across the current working directory.
+
+**Step 2a — If found in project:**
+Print: `"Found this code in <file_path> (lines N-M). Analyzing with full project context."`
+Switch to line-range mode with the resolved file path and line numbers. Proceed normally.
+
+**Step 2b — If NOT found in project:**
+Print a warning and recommendation:
+```
+"This code was not found in the current project.
+
+⚠ Analysis will have limited context — cross-file relationships cannot be resolved.
+⚠ Scanning the full project for context is expensive.
+
+Recommended: use '/code-diagram path/to/file.dart:from-to' syntax instead (cancel).
+
+  1. Cancel (recommended) — use path:from-to for cost-effective results
+  2. Proceed anyway — analyze with limited context
+
+Which option? (1/2, default: 1)"
+```
+
+If user chooses 1 (cancel): stop and show the usage hint.
+If user chooses 2 (proceed): analyze the pasted code in isolation — treat it like a virtual single file. Detect language from syntax patterns (keywords like `class`, `def`, `func`, `fn`). Generate diagrams for only the entities visible in the pasted code. Note in output: `"Pasted code analysis — limited context, cross-file relationships not shown."`
 
 ---
 
