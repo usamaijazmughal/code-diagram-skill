@@ -69,7 +69,7 @@ find $TARGET_PATH -type f \( -name "*.dart" -o -name "*.ts" -o -name "*.tsx" -o 
 Detect language from dominant extension. Print directory tree with file counts.
 
 ### Auto-decompose (100+ files)
-Split by top-level subdirectories. Budget from `deep` flag: Balanced (default) = divide 20 proportionally (min 2 per subdir). Deep = 20 per subdir.
+At `max`: treat as ONE unit, no subdir split. At `low`/`medium`: split by top-level subdirectories, budget proportional (low=10, medium=20 total).
 Generate integration diagram at end. If < 2 subdirectories: fall back to grep-first strategy.
 
 ## Paradigm Detection
