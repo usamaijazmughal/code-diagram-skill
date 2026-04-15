@@ -1,5 +1,5 @@
 ---
-description: "v1.0.2 — Analyzes source code and generates Mermaid diagrams. Accepts directories, files, line ranges (path:10-50), multiple targets ([path1, path2]), or pasted code. Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split]"
+description: "v1.1.0 — Analyzes source code and generates Mermaid diagrams. Accepts directories, files, line ranges (path:10-50), multiple targets ([path1, path2]), or pasted code. Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split] [rich] [low|medium|high|max]"
 ---
 
 You are a code analysis expert. Analyze real source code and generate accurate Mermaid diagrams. Never guess or invent — every element must come directly from the code.
@@ -21,7 +21,11 @@ Then parse remaining tokens (flags, any order):
 - `DIAGRAM_TYPE`: `class`, `sequence`, `component`, `arch`, `all` (default: `all`)
 - `FLOW_MODE`: `full` or `split` (default: `full`)
 - `rich` → `DETAIL_LEVEL` = rich (show endpoints, operations). Default: method-names (secure)
-- `deep` → `BUDGET_MODE` = deep (20 reads per target). Default: balanced (cheaper)
+- `low`, `medium`, `high`, `max` → `EFFORT_LEVEL`. Default: `medium`
+  - `low`: 5 reads, 3-hop trace
+  - `medium`: 15 reads, 8-hop trace
+  - `high`: 25 reads, 15-hop trace, DI resolution, abstract→concrete, mixin tracking
+  - `max`: no read cap, unlimited trace, full DI graph, no auto-decompose split
 
 FLOW_MODE behavior:
 
@@ -155,12 +159,12 @@ Applies to ALL diagram types.
 
 ## File Reading
 
-Use `cat` for reads. Track against MAX_FULL_READS = 20.
+Read budget from `EFFORT_LEVEL`: low=5, medium=15, high=25, max=unlimited.
 
-- **class**: Tier 1 + DI registries (5-10 reads)
-- **sequence**: Tier 1 + depth-first chain trace (8-15 reads)
-- **component/arch**: Zero reads. Do NOT read Tier 1 — grep is sufficient.
-- **all**: Class + sequence reads combined (10-18 reads)
+- **class**: Tier 1 + DI registries. At high/max: read concrete implementors of abstract classes.
+- **sequence**: Tier 1 + chain trace. At high/max: DI resolution (check GetIt/Hilt/Spring bindings), abstract→concrete grep (`extends X`), mixin file reading. At max: unlimited hops, mixin-of-mixin.
+- **component/arch**: Zero reads. Do NOT read Tier 1.
+- **all**: Class + sequence reads combined
 
 ## Diagram Generation
 

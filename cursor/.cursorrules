@@ -1,4 +1,4 @@
-# Code Diagram Generator v1.0.2
+# Code Diagram Generator v1.1.0
 
 When the user asks you to generate diagrams, analyze code structure, or visualize architecture, follow this analysis pipeline. Use terminal commands (`rg`, `find`, `cat`) for all file operations.
 
@@ -18,7 +18,11 @@ Also extract flags (can appear in any order in the user's request):
 - `DIAGRAM_TYPE` — `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
 - `FLOW_MODE` — `full` or `split` (default: `full`)
 - `DETAIL_LEVEL` — if user says "rich" or "with details" or "show endpoints" → `rich`. Otherwise → `method-names` (default, secure)
-- `BUDGET_MODE` — if user says "deep" or "full depth" → `deep`. Otherwise → `balanced` (default, cheaper)
+- `EFFORT_LEVEL` — `low`, `medium` (default), `high`, or `max`
+  - `low`: 5 reads, 3-hop trace, structure only
+  - `medium`: 15 reads, 8-hop trace (default)
+  - `high`: 25 reads, 15-hop trace, DI resolution, abstract→concrete, mixin tracking
+  - `max`: no read cap, unlimited trace, full DI graph, all implementors, no auto-decompose split
 
 ### File type validation
 If the target is a single file, check its extension: `.dart`, `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.kt`, `.java`, `.go`, `.swift`, `.rs`, `.svelte`. If unsupported, tell the user: "Unsupported file type. Please point at a source code file or directory."
@@ -176,12 +180,19 @@ Confirm against imports — `.find()` importing prisma = DB. `.find()` with no D
 
 ## File Reading
 
-Use `cat` for full reads. Track count against MAX_FULL_READS = 20.
+Read budget from `EFFORT_LEVEL`: low=5, medium=15, high=25, max=unlimited.
 
-- **class diagram**: Read Tier 1 + DI registries (5-10 files)
-- **sequence diagram**: Read Tier 1 + depth-first chain trace from entry point (8-15 files)
-- **component/arch**: Zero reads — grep data is sufficient. Do NOT read Tier 1 files.
-- **all**: Combine class + sequence reads (10-18 files)
+- **class diagram**: Tier 1 + DI registries. At high/max: also read concrete implementors of abstract classes.
+- **sequence diagram**: Tier 1 + depth-first chain trace.
+  - At **high/max**: when abstract class/interface encountered mid-trace:
+    1. Check DI registry for concrete binding (GetIt, Hilt, Spring `@Bean`, NestJS `useClass`)
+    2. If no DI binding: grep `extends AbstractClass` to find concrete implementors
+    3. Read concrete class, continue trace
+  - At **high/max**: when mixin/delegation encountered (`with MixinX` in Dart, `by impl` in Kotlin):
+    - Read mixin file, include its methods in trace
+  - At **max**: unlimited hops, follow mixin-of-mixin, note unresolvable boundaries
+- **component/arch**: Zero reads. Do NOT read Tier 1 files.
+- **all**: Combine class + sequence reads
 
 ## Diagram Generation
 

@@ -1,8 +1,8 @@
 ---
 name: code-diagram
-version: 1.0.2
+version: 1.1.0
 description: Analyzes source code and generates Mermaid diagrams. Accepts a directory, file, @reference, line range (path:10-50), multiple targets ([path1, path2]), or pasted code. Supports class, sequence, component, and architecture diagrams for Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust.
-argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split] [rich] [deep]"
+argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split] [rich] [low|medium|high|max]"
 allowed-tools: Glob Grep Read
 ---
 
@@ -12,7 +12,7 @@ You are a code analysis expert. Your job is to analyze real source code and gene
 
 Parse `$ARGUMENTS`:
 - If `$ARGUMENTS` is empty or blank → print usage help and stop:
-  `"Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split] [rich] [deep]"`
+  `"Usage: /code-diagram <input> [class|sequence|component|arch|all] [full|split] [rich] [low|medium|high|max]"`
 
 ### Step 1 — Detect input mode (check in this exact order)
 
@@ -31,7 +31,8 @@ After extracting the input, scan ALL remaining tokens. Each token is matched ind
 - `class`, `sequence`, `component`, `arch`, or `all` → `DIAGRAM_TYPE`. Default: `all`
 - `full` or `split` → `FLOW_MODE`. Default: `full`
 - `rich` → `DETAIL_LEVEL` = `rich` (show endpoints, operations, targets)
-- `deep` → `BUDGET_MODE` = `deep` (20 reads per target)
+- `low`, `medium`, `high`, or `max` → `EFFORT_LEVEL`. Default: `medium`
+- `deep` → treated as alias for `high` (backward compatibility)
 
 If a token doesn't match any of the above → validation error.
 
@@ -39,22 +40,30 @@ If a token doesn't match any of the above → validation error.
 - `DIAGRAM_TYPE` = `all`
 - `FLOW_MODE` = `full`
 - `DETAIL_LEVEL` = `method-names` (secure — no endpoints, no operation details shown)
-- `BUDGET_MODE` = `balanced` (proportional reads, cheaper)
+- `EFFORT_LEVEL` = `medium` (current behavior, 15 reads, 8-hop chain trace)
+
+### Effort levels
+
+| Level | Read budget | Chain trace | Abstract resolution | Mixin/composition tracking | Use case |
+|---|---|---|---|---|---|
+| `low` | 5 files | 3 hops | No | No | Quick orientation, large codebases |
+| `medium` | 15 files | 8 hops | Tier 1 only | Identified, not traced | Everyday use, PR reviews |
+| `high` | 25 files | 15 hops | DI registry + inheritance search | Read + trace mixin files | Architecture docs, detailed flows |
+| `max` | No cap | Unlimited | Full DI graph + all implementors | Full mixin-of-mixin resolution | Complex flows, cross-module audit |
 
 ### Valid examples
 
 ```
-/code-diagram lib/app                                    # all diagrams, full, method-names, balanced
+/code-diagram lib/app                                    # medium effort (default)
 /code-diagram lib/auth/bloc.dart                         # single-file mode
 /code-diagram @auth_bloc.dart                            # @ reference (resolved by Claude Code)
 /code-diagram lib/auth/bloc.dart:10-50 class             # line range, class diagram only
 /code-diagram [lib/auth, lib/payments] sequence           # multi-path, sequence only
-/code-diagram [lib/auth, lib/pay/bloc.dart, @file.dart]  # multi-path mixed types
 /code-diagram lib/app sequence split                     # split mode
 /code-diagram lib/app sequence rich                      # rich details (endpoints, operations)
-/code-diagram lib/app sequence split rich                # split + rich
-/code-diagram [lib/auth, lib/payments] deep              # multi-path, full budget per target
-/code-diagram lib/app all split rich deep                # everything explicit
+/code-diagram lib/app sequence high                      # DI resolution + abstract tracing
+/code-diagram lib/app sequence max rich                  # exhaustive + show endpoints
+/code-diagram [lib/auth, lib/payments] high              # multi-path, 25 reads per target
 ```
 
 ### FLOW_MODE behavior per diagram type
@@ -134,28 +143,19 @@ If the extension is valid:
 
 **Validation:** Each item is validated individually. If any item fails validation (path not found, unsupported type), report which item failed and continue with the remaining valid items.
 
-**Read budget (determined by `BUDGET_MODE` flag):**
+**Read budget per item (from `EFFORT_LEVEL`):**
 
-**Check `BUDGET_MODE` FIRST before allocating any reads:**
+| Effort | Budget per item |
+|---|---|
+| `low` | 5 per item |
+| `medium` | 15 per item |
+| `high` | 25 per item |
+| `max` | No cap per item |
 
-**If `BUDGET_MODE` = `deep`:**
-→ Each item gets **20 reads**. Period. Do NOT use the balanced table.
-→ Example: 3 items = 60 total reads. This is intentional.
-→ Print: `"Multi-path mode: N targets. Budget: deep (20 per target, M total)"`
+Print at start: `"Multi-path mode: N targets. Effort: LEVEL (X reads per target)"`
+Single-file and line-range items count as 1 read each regardless of effort level.
 
-**If `BUDGET_MODE` = `balanced` (default):**
-
-| List size | Budget per item | Total max |
-|---|---|---|
-| 2 items | 15 each | 30 |
-| 3 items | 12 each | 36 |
-| 4-5 items | 10 each | 40-50 |
-| 6+ items | 8 each | 48+ |
-
-→ Print: `"Multi-path mode: N targets. Budget: balanced (X per target, Y total)"`
-Single-file and line-range items count as 1 read each and are not affected by budget mode.
-
-**Auto-decompose within multi-path:** If a directory item in the list has 100+ files, auto-decompose triggers for that item. The item's allocated budget (e.g. 15 in balanced) is divided across its subdirectories using auto-decompose's proportional logic. Example: payments/ has 150 files and gets 15 reads → data/ gets 4, domain/ gets 3, presentation/ gets 6, di/ gets 2.
+**Auto-decompose within multi-path:** If a directory item has 100+ files AND effort is NOT `max`, auto-decompose triggers for that item. At `max`, the item is treated as one unit (no subdir split).
 
 **Analysis flow:**
 1. Run Discovery on each item independently per its mode
@@ -206,6 +206,7 @@ Not all phases apply to every input mode. Skipped phases are irrelevant for that
 | **Grep Scan** | All files | On the one file | On the extracted range | Per item | On pasted content |
 | **Structural Scoring** | Tier 1/2/3 | Skip (1 file) | Skip (1 range) | Per item within budget | Skip |
 | **Detail Level** | From `rich` flag | From `rich` flag | From `rich` flag | From `rich` flag | From `rich` flag |
+| **Effort Level** | From effort flag | From effort flag | From effort flag | From effort flag | From effort flag |
 | **File Reading** | Budget-controlled | Read the 1 file | Read the range | Per item within budget | Already have content |
 | **Diagram Generation** | All types | All types | All types | All types + cross-refs | All types |
 | **Insights** | Full | Lite (no hotspots) | Lite (no hotspots) | Full + per-item + cross-refs | Lite (limited context) |
@@ -216,18 +217,18 @@ Not all phases apply to every input mode. Skipped phases are irrelevant for that
 
 ## Global read budget
 
-**Default: MAX_FULL_READS = 20 per invocation.** This applies to directory mode, single-file mode, line-range mode, and pasted code mode.
+Read budget is set by `EFFORT_LEVEL`:
 
-**Override for multi-path mode:** When multi-path is active, the budget per item is set by the user's balanced/deep choice (see Multi-path mode section). The global 20 does NOT apply — the multi-path budget supersedes it.
+| Effort | Read budget | Chain trace depth | Notes |
+|---|---|---|---|
+| `low` | 5 files | 3 hops | Grep-only where possible |
+| `medium` | 15 files | 8 hops | Default |
+| `high` | 25 files | 15 hops | DI resolution + abstract tracing |
+| `max` | **No cap** | Unlimited | Reads everything in the chain |
 
-| Consumer | Typical allocation | Notes |
-|---|---|---|
-| Foundational files (Structural Scoring) | 3–8 | Abstract classes, heavily-imported files |
-| Sequence chain trace (File Reading) | 5–10 | Depth-first trace from entry point |
-| DI / entry point files (File Reading) | 2–3 | Module registries, main files |
-| **Remaining for overflow** | whatever's left | |
+**Multi-path override:** In multi-path mode, each item gets its own budget based on effort level. `low`=5, `medium`=15, `high`=25, `max`=unlimited per item.
 
-If at any point the running total reaches the active budget, **stop reading** and generate diagrams from what you have. Note in the output: `"Read budget reached. Diagram may be incomplete — use split mode or narrow the target path."`
+If at any point the running total reaches the active budget (for levels with a cap), **stop reading** and generate diagrams from what you have. Note: `"Read budget reached (EFFORT level). For deeper analysis, use a higher effort level."`
 
 ---
 
@@ -255,9 +256,17 @@ If at any point the running total reaches the active budget, **stop reading** an
 
 ### Auto-decompose mode (100+ files)
 
-If the total source file count is **100 or more**, do NOT attempt to analyze the entire directory as one unit. Instead, auto-decompose:
+**Check `EFFORT_LEVEL` FIRST — `max` disables auto-decompose:**
 
-1. Identify the **top-level subdirectories** under `TARGET_PATH` (e.g. `data/`, `domain/`, `presentation/`, `di/`).
+**If `EFFORT_LEVEL` = `max`:**
+→ Do NOT auto-decompose. Treat the entire directory as ONE unit regardless of file count.
+→ Print: `"Max effort: treating N files as single unit for complete cross-subdir chain tracing"`
+→ No read cap. Chain trace flows freely across subdirectory boundaries.
+→ Skip all auto-decompose steps below.
+
+**If `EFFORT_LEVEL` = `low`, `medium`, or `high` (and file count ≥ 100):**
+
+1. Identify the **top-level subdirectories** under `TARGET_PATH`.
 2. Print a summary table:
    ```
    Large feature detected (N files). Auto-decomposing by subdirectory.
@@ -269,37 +278,24 @@ If the total source file count is **100 or more**, do NOT attempt to analyze the
    | presentation/    | 80    | 25             |
    | di/              | 15    | 3              |
    ```
-   The "Classes (est.)" column comes from a quick grep count of class declarations per subdirectory.
 
-3. **Flat directory fallback:** If `TARGET_PATH` has fewer than 2 top-level subdirectories (all files are flat, or only 1 subdirectory), do NOT auto-decompose. Instead, fall back to the 50–99 file strategy: grep-first, auto-split class diagrams by layer, sequence traces happy-path only.
+3. **Flat directory fallback:** If fewer than 2 top-level subdirectories, fall back to the 50–99 file strategy.
 
-4. **Read budget (determined by `BUDGET_MODE` flag):**
+4. **Read budget per subdirectory (from `EFFORT_LEVEL`):**
 
-   **Check `BUDGET_MODE` FIRST before allocating any reads:**
+   | Effort | Budget per subdirectory |
+   |---|---|
+   | `low` | `floor(5 × subdir_files / total_files)`, min 1 |
+   | `medium` | `floor(15 × subdir_files / total_files)`, min 2 |
+   | `high` | 25 per subdirectory (no proportional split) |
 
-   **If `BUDGET_MODE` = `deep`:**
-   → Each subdirectory gets **20 reads**. Period. Do NOT divide proportionally.
-   → Example: 4 subdirectories = 80 total reads. This is intentional — the user chose depth over cost.
-   → Print: `"Auto-decompose: N subdirectories. Budget: deep (20 per subdir, M total)"`
+5. Process each subdirectory independently. Each gets its own diagram set.
 
-   **If `BUDGET_MODE` = `balanced` (default):**
-   → `floor(20 × subdir_files / total_files)` per subdirectory, minimum 2 each. Total must not exceed 20.
-   → Print: `"Auto-decompose: N subdirectories. Budget: balanced (20 total)"`
+6. After all subdirectories, generate one **Integration Diagram** (`graph TB`) showing cross-subdirectory connections.
 
-5. Process **each subdirectory independently** — run Phases 1.5 through 4 separately per subdirectory. Each subdirectory gets its own:
-   - Read budget from the user's choice above
-   - Diagram set: generate the requested `DIAGRAM_TYPE` for each subdirectory.
-   - Section heading: `**Subdirectory — name/ (N files)**`
+7. Subdirectories with fewer than 5 files → fold into nearest related subdirectory.
 
-6. After all subdirectories are processed, generate one final **Integration Diagram**:
-   - Mermaid `graph TB` showing how subdirectories connect to each other
-   - Each subdirectory as a `subgraph` node
-   - Arrows showing cross-subdirectory dependencies (from import patterns found during grep)
-   - External services and packages shared across subdirectories
-
-7. If a subdirectory has fewer than 5 files, fold it into the nearest related subdirectory rather than diagramming it alone.
-
-Files directly in `TARGET_PATH` (not in any subdirectory) are grouped as `**Root-level files**` and processed as their own section.
+Files directly in `TARGET_PATH` → grouped as `**Root-level files**`.
 
 ---
 
@@ -667,24 +663,73 @@ This applies to ALL diagram types across all input modes.
 
 ## File Reading
 
-**Key principle:** Grep covers ALL files cheaply. Full reads are expensive and must be justified per diagram type. All reads draw from the shared MAX_FULL_READS = 20 budget.
+**Key principle:** Grep covers ALL files cheaply. Full reads are expensive. Read budget is set by `EFFORT_LEVEL`.
 
 ### Reading strategy per diagram type
 
 #### CLASS DIAGRAM
 - Read Tier 1 files (foundational — abstract classes, heavily-inherited contracts)
 - Read Tier 2 DI registry files (to confirm what implements what)
-- Typical reads: 5–10 files
+- At `high`/`max`: also read concrete implementors of abstract classes found in Tier 1
 
-#### SEQUENCE DIAGRAM
-- Read Tier 1 files (to understand base class contracts in the call chain)
-- Then use a **depth-first chain trace** from the entry point:
-  1. Identify the entry point (screen / controller / main handler) via grep
-  2. Read it → find the first outbound method call or function call
-  3. Grep for the called class/function → identify its file → read it
-  4. Repeat until you hit an HTTP call, external SDK, or data store boundary
-  5. Do NOT read sideways (sibling classes not in the call chain)
-- Typical reads: 8–15 files (Tier 1 + chain)
+#### SEQUENCE DIAGRAM — effort-aware chain trace
+
+**Base chain trace (all effort levels):**
+1. Identify the entry point (screen / controller / main handler) via grep
+2. Read it → find the first outbound method call or function call
+3. Grep for the called class/function → identify its file → read it
+4. Repeat until you hit an HTTP call, external SDK, or data store boundary
+5. Do NOT read sideways (sibling classes not in the call chain)
+
+**Additional steps at `high` and `max` effort — abstract resolution:**
+
+When the chain trace encounters an abstract class, interface, protocol, or trait:
+
+**Step A — DI registry resolution (try first):**
+Check the DI registry files (already read as Tier 1/2) for a binding that maps the abstract to a concrete:
+```
+DART (GetIt):     registerSingleton<AbstractType>(() => ConcreteImpl())
+JAVA/KOTLIN:      @Binds abstract fun bind(impl: ConcreteImpl): AbstractType
+SPRING:           @Bean public AbstractType name() { return new ConcreteImpl(); }
+TS/NESTJS:        { provide: AbstractType, useClass: ConcreteImpl }
+PYTHON:           container.register(AbstractType, ConcreteImpl)
+```
+If found → read the concrete class file, continue tracing from there.
+
+**Step B — Inheritance search (fallback if no DI binding):**
+Grep across the codebase for concrete implementors:
+```
+DART:      extends\s+AbstractClassName|implements\s+AbstractClassName
+JAVA/KT:   extends\s+AbstractClassName|implements\s+AbstractClassName|:\s*AbstractClassName
+TS/JS:     extends\s+AbstractClassName|implements\s+AbstractClassName
+PYTHON:    class\s+\w+\s*\(\s*AbstractClassName
+GO:        (find structs with matching method signatures)
+SWIFT:     :\s*AbstractClassName
+RUST:      impl\s+AbstractClassName\s+for\s+\w+
+```
+If one found → read it, continue. If multiple → read the most likely (by file naming convention or DI context), note others.
+
+**Step C — Mixin/composition resolution (high/max only):**
+When a class in the chain has composition attachments:
+```
+DART:      with MixinA, MixinB → grep for `mixin MixinA`, read it, include its methods
+KOTLIN:    by delegateImpl → grep for the delegate class, read it
+PYTHON:    class Foo(MixinA, MixinB, Base) → read each mixin
+```
+At `max`: follow mixin-of-mixin chains. At `high`: one level of mixin resolution.
+
+**Unresolvable boundaries (`max` only):**
+If abstract resolution fails (no DI binding, no concrete class found), note in the diagram:
+`"Abstract boundary — ConcreteImpl not statically resolvable (runtime DI/factory)"`
+
+**Effort-specific chain trace limits:**
+
+| Effort | Max hops | Abstract resolution | Mixin resolution | Cross-boundary |
+|---|---|---|---|---|
+| `low` | 3 | No | No | No |
+| `medium` | 8 | Tier 1 only (read but don't search) | Identified, not traced | No |
+| `high` | 15 | DI registry + inheritance grep | Read mixin files, 1 level | 1 level up |
+| `max` | Unlimited | Full DI graph + all implementors | Mixin-of-mixin | 2 levels up |
 
 #### COMPONENT DIAGRAM — zero reads
 Import statements + HTTP patterns from grep tell you everything about external dependencies.
@@ -938,7 +983,7 @@ After the diagrams, add a brief **Key Insights** section (bullet points, tailore
 
 - **Never invent** entity names, method names, or relationships not found in the code
 - **Never apply OOP diagram patterns to a component or functional codebase** — use the correct paradigm strategy
-- **Never exceed MAX_FULL_READS (20)** — note when the budget is hit
+- **Never exceed the effort level's read budget** (low=5, medium=15, high=25, max=unlimited) — note when budget is hit
 - If a directory has no source files, say so and stop
 - If the path doesn't exist, report it and stop
 - Keep each diagram focused — **30 nodes max** per diagram; split into sub-diagrams if larger

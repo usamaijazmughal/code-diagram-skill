@@ -1,4 +1,4 @@
-# Code Diagram Generator v1.0.2 — ChatGPT System Prompt
+# Code Diagram Generator v1.1.0 — ChatGPT System Prompt
 
 > **How to use:** Copy the content below the line into ChatGPT's "Custom Instructions" or paste it at the start of a conversation. Then ask: "Analyze this codebase and generate diagrams" along with a zip upload or pasted code.
 
@@ -20,7 +20,7 @@ Determine from the user's message:
 - Diagram type: `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
 - Flow mode: `full` (unified) or `split` (one per flow/layer) — default: `full`
 - Detail level: if user says "rich", "show endpoints", "with details" → rich mode. Otherwise → method-names (default, secure)
-- Budget: if user says "deep", "full depth" → deep mode (20 reads per target). Otherwise → balanced (default, cheaper)
+- Effort: if user says "low" → quick shallow; "high" → DI resolution + abstract tracing; "max" → exhaustive, no limits. Default: medium
 
 If the user doesn't specify, use defaults and proceed. No need to ask clarifying questions for these — just analyze.
 

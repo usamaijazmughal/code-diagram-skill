@@ -1,6 +1,6 @@
 # code-diagram
 
-**v1.0.2** | [Changelog](#changelog)
+**v1.1.0** | [Changelog](#changelog)
 
 > An AI skill that reads your actual source code and generates Mermaid diagrams.
 > Point it at any directory, file, line range, or multiple targets. It detects the language, paradigm, and produces class, sequence, component, and architecture diagrams.
@@ -52,8 +52,9 @@ Restart your tool after installing. For Claude Code, type `/code-diagram` and it
 /code-diagram lib/auth/bloc.dart:10-50 class             # line range
 /code-diagram [lib/auth, lib/payments] sequence           # multiple targets
 /code-diagram lib/app sequence rich                      # show endpoints + operations
-/code-diagram [lib/auth, lib/payments] deep              # full budget per target
-/code-diagram lib/app all split rich deep                # everything explicit
+/code-diagram lib/app sequence high                      # DI resolution + abstract tracing
+/code-diagram lib/app sequence max rich                  # exhaustive + endpoints
+/code-diagram [lib/auth, lib/payments] high              # 25 reads per target
 ```
 
 | Input mode | When to use |
@@ -67,7 +68,10 @@ Restart your tool after installing. For Claude Code, type `/code-diagram` and it
 | Flag | What it does | Default |
 |---|---|---|
 | `rich` | Show endpoints, DB entities, operations in diagram labels | Off (method-names only, secure) |
-| `deep` | Full 20 reads per target in multi-path/auto-decompose | Off (balanced, cheaper) |
+| `low` | Quick shallow — 5 reads, 3-hop trace, structure only | — |
+| `medium` | Balanced — 15 reads, 8-hop trace | Default |
+| `high` | Deep — 25 reads, 15-hop, DI resolution, abstract→concrete, mixin tracking | — |
+| `max` | Exhaustive — no read cap, unlimited trace, full DI graph traversal | — |
 
 ---
 
@@ -175,7 +179,8 @@ Run these on the same directory, from cheapest to most expensive:
 /code-diagram lib/features/payments sequence           # 5-12 reads
 /code-diagram lib/features/payments all                # 8-18 reads
 /code-diagram lib/features/payments all rich           # same reads, richer labels
-/code-diagram lib/features/payments all rich deep      # max reads (for 100+ files)
+/code-diagram lib/features/payments all high           # DI resolution + abstract tracing
+/code-diagram lib/features/payments all max rich       # exhaustive + endpoints
 ```
 
 ### Expected read counts
@@ -201,6 +206,8 @@ Read budget usage: 12 of 20 file reads used
 - Sequence chain reading sibling files not in the call chain
 - Hitting 20/20 reads on a feature under 50 files
 - `rich` flag increasing read count (it shouldn't — `rich` only changes labels, not reads)
+- `medium` effort using more than 15 reads
+- `high` effort not resolving abstract→concrete (DI binding should be checked)
 
 ---
 
@@ -240,7 +247,7 @@ The version is in the plugin metadata:
 - **Claude Code:** Check `plugins/code-diagram/.claude-plugin/plugin.json` or `.claude-plugin/marketplace.json`
 - **All tools:** Compare your local file with the [latest on GitHub](https://github.com/usamaijazmughal/code-diagram/blob/main/plugins/code-diagram/.claude-plugin/plugin.json)
 
-Current version: **1.0.2**
+Current version: **1.1.0**
 
 ---
 
@@ -302,6 +309,16 @@ code-diagram/
 ---
 
 ## Changelog
+
+### v1.1.0
+- **Effort levels:** `low`, `medium` (default), `high`, `max` — replaces `deep` flag
+- `high`/`max`: DI registry resolution (GetIt, Hilt, Spring, NestJS) to follow abstract→concrete
+- `high`/`max`: inheritance search fallback (grep `extends AbstractClass`) when no DI binding found
+- `high`/`max`: mixin/composition tracking (Dart `with`, Kotlin `by`, Python multiple inheritance)
+- `max`: no read cap, unlimited chain trace, no auto-decompose split, full DI graph traversal
+- Unresolvable boundaries explicitly noted in diagrams
+- Universal across all languages (Dart, Java, Kotlin, TypeScript, Python, Go, Swift, Rust)
+- `deep` kept as alias for `high` (backward compatibility)
 
 ### v1.0.2
 - Detail level prompt: method names (recommended, secure) vs rich details (opt-in)
