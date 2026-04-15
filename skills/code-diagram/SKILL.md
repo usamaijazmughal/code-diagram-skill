@@ -279,18 +279,41 @@ If the total source file count is **100 or more**, do NOT attempt to analyze the
 
 3. **Flat directory fallback:** If `TARGET_PATH` has fewer than 2 top-level subdirectories (all files are flat, or only 1 subdirectory), do NOT auto-decompose. Instead, fall back to the 50–99 file strategy: grep-first, auto-split class diagrams by layer, sequence traces happy-path only.
 
-4. Process **each subdirectory independently** — run Phases 1.5 through 4 separately per subdirectory. Each subdirectory gets its own:
-   - Read budget: **MAX_FULL_READS is divided proportionally** by file count per subdirectory: `floor(20 × subdir_files / total_files)`, minimum 2 per subdirectory. The total across all subdirectories **must not exceed MAX_FULL_READS (20)** — if the proportional allocation sums to more than 20, reduce the smallest subdirectories to 1 read each until the total fits.
+4. **Read budget — user chooses before analysis starts:**
+
+   BEFORE processing subdirectories, present the budget choice:
+
+   ```
+   Auto-decompose: N subdirectories detected.
+
+   Budget options:
+     1. Balanced (recommended) — budget split proportionally across subdirectories, 20 total reads.
+        Cheaper. Some subdirectories may get as few as 2-3 reads.
+
+     2. Deep — 20 reads per subdirectory, M total reads.
+        Full depth for all subdirectories. More expensive.
+
+   Which mode? (1/2, default: 1)
+   ```
+
+   **Balanced (option 1):** `floor(20 × subdir_files / total_files)` per subdirectory, minimum 2 each. Total across all subdirectories must not exceed 20 — if the sum exceeds 20, reduce smallest subdirectories to 1 read each until it fits.
+
+   **Deep (option 2):** 20 reads per subdirectory regardless of count.
+
+   Wait for user response. Default: Balanced.
+
+5. Process **each subdirectory independently** — run Phases 1.5 through 4 separately per subdirectory. Each subdirectory gets its own:
+   - Read budget from the user's choice above
    - Diagram set: generate the requested `DIAGRAM_TYPE` for each subdirectory.
    - Section heading: `**Subdirectory — name/ (N files)**`
 
-5. After all subdirectories are processed, generate one final **Integration Diagram**:
+6. After all subdirectories are processed, generate one final **Integration Diagram**:
    - Mermaid `graph TB` showing how subdirectories connect to each other
    - Each subdirectory as a `subgraph` node
    - Arrows showing cross-subdirectory dependencies (from import patterns found during grep)
    - External services and packages shared across subdirectories
 
-6. If a subdirectory has fewer than 5 files, fold it into the nearest related subdirectory rather than diagramming it alone.
+7. If a subdirectory has fewer than 5 files, fold it into the nearest related subdirectory rather than diagramming it alone.
 
 Files directly in `TARGET_PATH` (not in any subdirectory) are grouped as `**Root-level files**` and processed as their own section.
 
