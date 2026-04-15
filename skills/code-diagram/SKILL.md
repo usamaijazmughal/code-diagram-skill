@@ -72,7 +72,7 @@ If `TARGET_PATH` does not exist (directory or file modes):
 
 ### Directory mode (existing)
 
-When `TARGET_PATH` is a directory. Proceed directly to Phase 1 Discovery. No changes to existing behavior.
+When `TARGET_PATH` is a directory. Proceed directly to Discovery phase. No changes to existing behavior.
 
 ### Single-file mode (existing)
 
@@ -82,9 +82,9 @@ When `TARGET_PATH` is a single file.
 → Print: `"Unsupported file type: '.<ext>'. Supported: .dart, .ts, .tsx, .js, .jsx, .py, .kt, .java, .go, .swift, .rs, .svelte."` followed by `"Tip: Point at a source code file or a directory containing source files."` and stop.
 
 If the extension is valid:
-1. Skip Phase 1 Glob — just read this one file
-2. Skip Phase 1.5 paradigm probes — detect language from extension, paradigm from file content
-3. Skip Phase 2.5 scoring — no cross-file analysis needed
+1. Skip Discovery — just read this one file
+2. Skip Paradigm Detection — detect language from extension, paradigm from file content
+3. Skip Structural Scoring — no cross-file analysis needed
 4. Generate diagrams scoped to that single file only (classes within it, methods within it)
 5. Note in output: `"Single-file analysis — cross-file relationships are not shown."`
 
@@ -101,11 +101,11 @@ If the extension is valid:
 - Check `LINE_TO` does not exceed the file's total line count
 
 **Analysis (like single-file mode — skip Phases 1, 1.5, and 2.5):**
-1. Skip Phase 1 Glob — target is known
+1. Skip Discovery — target is known
 2. Read only lines `LINE_FROM` through `LINE_TO` of the file
-3. Skip Phase 1.5 — detect language from extension, paradigm from content within the range
-4. Run Phase 2 grep on the extracted range only
-5. Skip Phase 2.5 — no cross-file scoring (single range)
+3. Skip Paradigm Detection — detect language from extension, paradigm from content within the range
+4. Run Grep Scan on the extracted range only
+5. Skip Structural Scoring — no cross-file scoring (single range)
 6. Generate diagrams for only the entities found within those lines
 7. Note in output: `"Line range analysis (lines FROM-TO of file.dart) — entities outside this range are not shown."`
 
@@ -157,9 +157,9 @@ Single-file and line-range items count as 1 read each and are not affected by bu
 **Auto-decompose within multi-path:** If a directory item in the list has 100+ files, auto-decompose triggers for that item. The item's allocated budget (e.g. 15 in balanced) is divided across its subdirectories using auto-decompose's proportional logic. Example: payments/ has 150 files and gets 15 reads → data/ gets 4, domain/ gets 3, presentation/ gets 6, di/ gets 2.
 
 **Analysis flow:**
-1. Run Phase 1 (discovery) on each item independently per its mode
-2. Merge entity lists. Run Phase 1.5 (paradigm) on the merged set
-3. Run Phase 2 (grep) on each item. Run Phase 2.5 (scoring) per item within its budget
+1. Run Discovery on each item independently per its mode
+2. Merge entity lists. Run Paradigm Detection on the merged set
+3. Run Grep Scan on each item. Run Structural Scoring per item within its budget
 4. **Cross-path relationship detection:** After all grep passes, check import patterns across items. If item A imports from item B → draw connection at the relation point. If no cross-path imports → mark as "independent"
 5. **Diagram output:**
    - Each item gets a labeled `subgraph` (for graph diagrams) or `rect` section (for sequence)
@@ -209,14 +209,14 @@ Not all phases apply to every input mode. Skipped phases are irrelevant for that
 
 | Phase | Directory | Single file | Line range | Multi-path | Pasted code |
 |---|---|---|---|---|---|
-| **1 — Discovery** | Glob all files | Skip (have the file) | Skip (have the range) | Per item | Skip |
-| **1.5 — Paradigm** | 3 probe greps | Skip (detect from content) | Skip (detect from content) | On merged set | Detect from syntax |
-| **2 — Grep scan** | All files | On the one file | On the extracted range | Per item | On pasted content |
-| **2.5 — Scoring** | Tier 1/2/3 | Skip (1 file) | Skip (1 range) | Per item within budget | Skip |
-| **3 — Reading** | Budget-controlled | Read the 1 file | Read the range | Per item within budget | Already have content |
-| **4 — Diagrams** | All types | All types | All types | All types + cross-refs | All types |
-| **2.75 — Detail prompt** | If Pass 3 found ops | If Pass 3 found ops | If Pass 3 found ops | If any item has ops | If Pass 3 found ops |
-| **5 — Insights** | Full | Lite (no hotspots) | Lite (no hotspots) | Full + per-item + cross-refs | Lite (limited context) |
+| **Discovery** | Glob all files | Skip (have the file) | Skip (have the range) | Per item | Skip |
+| **Paradigm Detection** | 3 probe greps | Skip (detect from content) | Skip (detect from content) | On merged set | Detect from syntax |
+| **Grep Scan** | All files | On the one file | On the extracted range | Per item | On pasted content |
+| **Structural Scoring** | Tier 1/2/3 | Skip (1 file) | Skip (1 range) | Per item within budget | Skip |
+| **Detail Level Prompt** | If Pass 3 found ops | If Pass 3 found ops | If Pass 3 found ops | If any item has ops | If Pass 3 found ops |
+| **File Reading** | Budget-controlled | Read the 1 file | Read the range | Per item within budget | Already have content |
+| **Diagram Generation** | All types | All types | All types | All types + cross-refs | All types |
+| **Insights** | Full | Lite (no hotspots) | Lite (no hotspots) | Full + per-item + cross-refs | Lite (limited context) |
 
 **"Lite" insights** means: paradigm, entity count, and external deps are reported, but cross-file metrics (hotspots, violations, circular deps) cannot be computed from a single file/range.
 
@@ -230,16 +230,16 @@ Not all phases apply to every input mode. Skipped phases are irrelevant for that
 
 | Consumer | Typical allocation | Notes |
 |---|---|---|
-| Foundational files (Phase 2.5) | 3–8 | Abstract classes, heavily-imported files |
-| Sequence chain trace (Phase 3) | 5–10 | Depth-first trace from entry point |
-| DI / entry point files (Phase 3) | 2–3 | Module registries, main files |
+| Foundational files (Structural Scoring) | 3–8 | Abstract classes, heavily-imported files |
+| Sequence chain trace (File Reading) | 5–10 | Depth-first trace from entry point |
+| DI / entry point files (File Reading) | 2–3 | Module registries, main files |
 | **Remaining for overflow** | whatever's left | |
 
 If at any point the running total reaches the active budget, **stop reading** and generate diagrams from what you have. Note in the output: `"Read budget reached. Diagram may be incomplete — use split mode or narrow the target path."`
 
 ---
 
-## PHASE 1 — Discovery
+## Discovery
 
 ### Directory mode
 1. Use **Glob** to find all source files under `TARGET_PATH` recursively.
@@ -321,7 +321,7 @@ Files directly in `TARGET_PATH` (not in any subdirectory) are grouped as `**Root
 
 ---
 
-## PHASE 1.5 — Paradigm Detection
+## Paradigm Detection
 
 **Language alone is not enough.** JavaScript can be React components, Angular OOP, or Node.js functions. Python can be Flask routes, Django OOP, or pure functions. The paradigm determines which grep patterns to use and which diagram types make sense.
 
@@ -364,9 +364,9 @@ Priority order matters: Angular has both classes (OOP probe) AND @Component deco
 
 ---
 
-## PHASE 2 — Paradigm-Aware Grep Scan
+## Grep Scan
 
-**Never read a file until Phase 3.** Use only Grep here.
+**Never read a file until the File Reading phase.** Use only Grep here.
 
 Use the strategy matching the detected paradigm. If Mixed, run both A and B/C.
 
@@ -602,7 +602,7 @@ For **Mixed**: merge all; tag each entity with its paradigm type
 
 ---
 
-## PHASE 2.5 — Structural Importance Scoring
+## Structural Scoring
 
 **This phase identifies which files are foundational using structural signals — never class names.**
 
@@ -672,9 +672,9 @@ TIER 3 (grep only):
 
 ---
 
-## PHASE 2.75 — Detail Level Prompt
+## Detail Level Prompt
 
-**This happens AFTER all grep passes (including Pass 3) but BEFORE any file reading.** The user's choice is needed before Phase 3 begins.
+**This happens AFTER all grep passes (including Pass 3) but BEFORE any file reading.** The user's choice is needed before the File Reading phase begins.
 
 When Pass 3 detects ANY external operations (HTTP endpoints, DB, cache, queue, etc.), ask the user ONCE:
 
@@ -695,13 +695,13 @@ Which level? (1/2, default: 1)
 Default is **method names** (secure). Rich is opt-in for internal/trusted contexts.
 Only show this prompt when external operations are actually found in grep results. If Pass 3 found nothing, skip entirely.
 
-**For line-range and single-file modes:** Pass 3 patterns are checked against the file content during Phase 2 grep. If external operations are found, this prompt STILL fires before diagram generation.
+**For line-range and single-file modes:** Pass 3 patterns are checked against the file content during Grep Scan. If external operations are found, this prompt STILL fires before diagram generation.
 
-Store the user's choice as `DETAIL_LEVEL` (`method-names` or `rich`) and apply it in Phase 4 across all diagram types.
+Store the user's choice as `DETAIL_LEVEL` (`method-names` or `rich`) and apply it in the Diagram Generation phase across all diagram types.
 
 ---
 
-## PHASE 3 — Diagram-Aware File Reading
+## File Reading
 
 **Key principle:** Grep covers ALL files cheaply. Full reads are expensive and must be justified per diagram type. All reads draw from the shared MAX_FULL_READS = 20 budget.
 
@@ -747,7 +747,7 @@ Read Tier 1 files + sequence chain-trace files. Component and arch diagrams are 
 
 ---
 
-## PHASE 4 — Paradigm-Aware Diagram Generation
+## Diagram Generation
 
 Generate only the diagram types requested by `DIAGRAM_TYPE`. For `all`, generate all four.
 
@@ -939,7 +939,7 @@ After all subsystem diagrams, add one **Integration diagram** showing how subsys
 
 ---
 
-## PHASE 5 — Insights
+## Insights
 
 After the diagrams, add a brief **Key Insights** section (bullet points, tailored to paradigm):
 
