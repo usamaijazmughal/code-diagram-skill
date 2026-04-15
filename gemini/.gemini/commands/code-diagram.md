@@ -50,7 +50,7 @@ If input doesn't match any path pattern: grep project for the code. If found →
 
 **MAX_FULL_READS = 20.** Shared pool. Use shell `cat` for reads, `rg` (ripgrep) for search. Grep is free; reads are expensive. **Override:** In multi-path mode, the user's balanced/deep choice supersedes this limit.
 
-## PHASE 1 — Discovery
+## Discovery
 
 Find source files using shell:
 ```bash
@@ -74,7 +74,7 @@ Which mode? (1/2, default: 1)
 Balanced: divide 20 proportionally (min 2 per subdir). Deep: 20 per subdir.
 Generate integration diagram at end. If < 2 subdirectories: fall back to grep-first strategy.
 
-## PHASE 1.5 — Paradigm Detection
+## Paradigm Detection
 
 Run 3 probes with `rg -c`:
 ```bash
@@ -90,9 +90,9 @@ Classification (first match wins):
 4. Functional 5+ AND > 2x OOP → **Functional** (Strategy C)
 5. Ambiguous → **Mixed** (Strategy A + C)
 
-## PHASE 2 — Grep Scan
+## Grep Scan
 
-Use `rg` for all searches. Never read files until Phase 3.
+Use `rg` for all searches. Never read files until the File Reading phase.
 
 ### STRATEGY A — OOP (2 batched passes)
 
@@ -126,7 +126,7 @@ OOP: class list, relationships, API calls, deps, DI.
 Component: component list, render tree, hooks, API calls, state.
 Functional: function list, module deps, route map.
 
-## PHASE 2.5 — Structural Importance Scoring
+## Structural Scoring
 
 **TIER 1 (must read):** abstract class/protocol/trait, extended by 3+ files, imported by 5+ files, generic + extended.
 Use language-specific import patterns to count frequency:
@@ -143,15 +143,6 @@ Barrel guard: `index.ts` with only re-exports → Tier 3.
 
 Cross-boundary: search up to 2 levels above TARGET_PATH for missing Tier 1 classes.
 
-## PHASE 3 — File Reading
-
-Use `cat` for reads. Track against MAX_FULL_READS = 20.
-
-- **class**: Tier 1 + DI registries (5-10 reads)
-- **sequence**: Tier 1 + depth-first chain trace (8-15 reads)
-- **component/arch**: Zero reads. Do NOT read Tier 1 — grep is sufficient.
-- **all**: Class + sequence reads combined (10-18 reads)
-
 ## Pass 3 — External Operations
 
 Run 3 composite greps in parallel:
@@ -163,6 +154,8 @@ Confirm against imports. `.find()` + prisma import = DB. `.find()` without DB im
 
 ## Detail Level Prompt
 
+**This happens AFTER all grep passes but BEFORE any file reading.**
+
 When external operations detected, ask once:
 ```
   1. Method names only (recommended) — safe to share
@@ -173,7 +166,16 @@ Rich: full endpoints, `READ/WRITE entity` for DB (no query text), compact ops fo
 Method-names: identical to v1.0.1.
 Applies to ALL diagram types.
 
-## PHASE 4 — Diagram Generation
+## File Reading
+
+Use `cat` for reads. Track against MAX_FULL_READS = 20.
+
+- **class**: Tier 1 + DI registries (5-10 reads)
+- **sequence**: Tier 1 + depth-first chain trace (8-15 reads)
+- **component/arch**: Zero reads. Do NOT read Tier 1 — grep is sufficient.
+- **all**: Class + sequence reads combined (10-18 reads)
+
+## Diagram Generation
 
 ### Mermaid guardrails
 - `%%{init: {'theme': 'dark'}}%%` as first line of EVERY diagram
@@ -201,7 +203,7 @@ Applies to ALL diagram types.
 - **full:** `graph TB` with subgraph per layer. Flag violations.
 - **split:** One per subsystem + integration diagram.
 
-## PHASE 5 — Insights
+## Insights
 
 Bullet points: paradigm + confidence, entity count, external deps, read budget usage, hotspots, violations.
 

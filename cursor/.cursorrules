@@ -50,7 +50,7 @@ FLOW_MODE behavior per diagram type:
 
 **MAX_FULL_READS = 20 per invocation.** Track how many files you fully read with `cat`. Grep (`rg`) is free — use it liberally. **Override:** In multi-path mode, the user's balanced/deep choice supersedes this limit.
 
-## PHASE 1 — Discovery
+## Discovery
 
 Find all source files:
 ```bash
@@ -79,7 +79,7 @@ Analyze each independently, generate integration diagram at the end.
 
 If fewer than 2 subdirectories: fall back to grep-first strategy for 50-99 file features.
 
-## PHASE 1.5 — Paradigm Detection
+## Paradigm Detection
 
 Run these 3 probes:
 ```bash
@@ -95,9 +95,9 @@ rg -c '^(def\s+\w+|func\s+\w+|fn\s+\w+|export\s+function)' TARGET_PATH  # Functi
 4. Functional 5+ AND > 2x OOP → **Functional** (Go/Express). Run Strategy C.
 5. Ambiguous → **Mixed**. Run A + C.
 
-## PHASE 2 — Grep Scan
+## Grep Scan
 
-Use `rg` (ripgrep) for all pattern searches. Never `cat` a file until Phase 3.
+Use `rg` (ripgrep) for all pattern searches. Never `cat` a file until the File Reading phase.
 
 ### STRATEGY A — OOP
 
@@ -140,7 +140,7 @@ rg '@app\.(get|post)|(app|router)\.(get|post)' TARGET_PATH                   # R
 rg "import.*from\s+['\"]\./" TARGET_PATH                                      # Internal deps
 ```
 
-## PHASE 2.5 — Structural Importance Scoring
+## Structural Scoring
 
 Classify files into tiers using structural signals (not names):
 
@@ -159,15 +159,6 @@ Classify files into tiers using structural signals (not names):
 
 **Cross-boundary:** For Tier 1 classes not in TARGET_PATH, search up to 2 directory levels above.
 
-## PHASE 3 — File Reading
-
-Use `cat` for full reads. Track count against MAX_FULL_READS = 20.
-
-- **class diagram**: Read Tier 1 + DI registries (5-10 files)
-- **sequence diagram**: Read Tier 1 + depth-first chain trace from entry point (8-15 files)
-- **component/arch**: Zero reads — grep data is sufficient. Do NOT read Tier 1 files.
-- **all**: Combine class + sequence reads (10-18 files)
-
 ## Pass 3 — External Operations (all strategies)
 
 Run 3 composite greps in parallel with Pass 1 and Pass 2:
@@ -179,7 +170,9 @@ Confirm against imports — `.find()` importing prisma = DB. `.find()` with no D
 
 ## Detail Level Prompt
 
-When external operations are detected, ask before generating:
+**This happens AFTER all grep passes but BEFORE any file reading.**
+
+When external operations are detected, ask before reading or generating:
 ```
 Detail level for ALL diagrams:
   1. Method names only (recommended) — safe to share externally
@@ -197,7 +190,16 @@ Which level? (1/2, default: 1)
 
 **Method-names mode:** identical to v1.0.1 output. No changes.
 
-## PHASE 4 — Diagram Generation
+## File Reading
+
+Use `cat` for full reads. Track count against MAX_FULL_READS = 20.
+
+- **class diagram**: Read Tier 1 + DI registries (5-10 files)
+- **sequence diagram**: Read Tier 1 + depth-first chain trace from entry point (8-15 files)
+- **component/arch**: Zero reads — grep data is sufficient. Do NOT read Tier 1 files.
+- **all**: Combine class + sequence reads (10-18 files)
+
+## Diagram Generation
 
 ### Mermaid guardrails
 - **Dark theme:** Start every diagram with `%%{init: {'theme': 'dark'}}%%`
@@ -227,7 +229,7 @@ Every diagram MUST be in a fenced ```mermaid block. Never mix prose inside the f
 - **split:** One diagram per subsystem + integration diagram
 - Flag layer violations
 
-## PHASE 5 — Insights
+## Insights
 
 Add **Key Insights** after diagrams:
 - Paradigm and confidence level
