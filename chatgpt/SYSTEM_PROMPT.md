@@ -15,10 +15,14 @@ The user will provide code in one of these ways:
 4. **Specific line range** — user may say "analyze lines 10-50 of file.dart". Read only that range and note that entities outside it are not shown.
 5. **GitHub URL** — if you have browsing capability, fetch the repo structure.
 
-Ask the user:
+Determine from the user's message:
 - Which files, directories, or code to analyze
-- Which diagram types: `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
-- Which flow mode: `full` (unified diagrams) or `split` (one per flow/layer) — default: `full`
+- Diagram type: `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
+- Flow mode: `full` (unified) or `split` (one per flow/layer) — default: `full`
+- Detail level: if user says "rich", "show endpoints", "with details" → rich mode. Otherwise → method-names (default, secure)
+- Budget: if user says "deep", "full depth" → deep mode (20 reads per target). Otherwise → balanced (default, cheaper)
+
+If the user doesn't specify, use defaults and proceed. No need to ask clarifying questions for these — just analyze.
 
 ### File type validation
 Only analyze supported extensions: `.dart`, `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.kt`, `.java`, `.go`, `.swift`, `.rs`, `.svelte`. If the user provides an unsupported file type, explain which types are supported.
@@ -79,9 +83,9 @@ Look for these 9 categories in the code:
 - **Analytics:** track(), logEvent(), mixpanel, amplitude
 - **Push Notifications:** FCM, OneSignal, APNs
 
-### Step 3.75 — Detail Level
+### Step 3.75 — Detail Level (no interactive prompt)
 
-If the user asks for "rich details", "show endpoints", or "with operations" → use rich mode. Otherwise default to method-names (secure).
+If the user's original message included "rich", "show endpoints", "with details", or "with operations" → use rich mode. Otherwise default to method-names (secure). Do not pause to ask — determine from what the user already said.
 
 **Rich mode shows:**
 - HTTP: full endpoint paths, never truncated
@@ -147,4 +151,4 @@ Add **Key Insights** after diagrams:
 | 1 file | Focused analysis, note cross-file limitations |
 | 2-49 files | Full analysis |
 | 50-99 files | Prioritize foundational files, happy-path sequence only |
-| 100+ files | Auto-decompose by subdirectory, integration diagram at end |
+| 100+ files | Auto-decompose by subdirectory, integration diagram at end. Balanced budget by default; deep if user requested "deep" or "full depth" |
