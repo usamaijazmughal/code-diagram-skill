@@ -48,7 +48,7 @@ FLOW_MODE behavior per diagram type:
 
 ## Global read budget
 
-**MAX_FULL_READS = 20 per invocation.** Track how many files you fully read with `cat`. Grep (`rg`) is free — use it liberally.
+**MAX_FULL_READS = 20 per invocation.** Track how many files you fully read with `cat`. Grep (`rg`) is free — use it liberally. **Override:** In multi-path mode, the user's balanced/deep choice supersedes this limit.
 
 ## PHASE 1 — Discovery
 
@@ -67,7 +67,15 @@ Detect language from dominant extension. Count files per subdirectory.
 If zero files found: report and stop.
 
 ### Auto-decompose (100+ files)
-If 100+ files: split by top-level subdirectories, analyze each independently, generate integration diagram at the end. Divide read budget proportionally (min 2 per subdir, total must not exceed 20).
+If 100+ files: split by top-level subdirectories. Before starting, ask the user:
+```
+Auto-decompose: N subdirectories detected.
+  1. Balanced (recommended) — budget split proportionally, 20 total reads. Cheaper.
+  2. Deep — 20 reads per subdirectory. Full depth, more expensive.
+Which mode? (1/2, default: 1)
+```
+Balanced: divide 20 proportionally (min 2 per subdir). Deep: 20 per subdir.
+Analyze each independently, generate integration diagram at the end.
 
 If fewer than 2 subdirectories: fall back to grep-first strategy for 50-99 file features.
 

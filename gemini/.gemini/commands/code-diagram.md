@@ -48,7 +48,7 @@ If input doesn't match any path pattern: grep project for the code. If found →
 
 ## Global read budget
 
-**MAX_FULL_READS = 20.** Shared pool. Use shell `cat` for reads, `rg` (ripgrep) for search. Grep is free; reads are expensive.
+**MAX_FULL_READS = 20.** Shared pool. Use shell `cat` for reads, `rg` (ripgrep) for search. Grep is free; reads are expensive. **Override:** In multi-path mode, the user's balanced/deep choice supersedes this limit.
 
 ## PHASE 1 — Discovery
 
@@ -64,7 +64,15 @@ find $TARGET_PATH -type f \( -name "*.dart" -o -name "*.ts" -o -name "*.tsx" -o 
 Detect language from dominant extension. Print directory tree with file counts.
 
 ### Auto-decompose (100+ files)
-Split by top-level subdirectories. Each gets proportional read budget (min 2, total <= 20). Generate integration diagram at end. If < 2 subdirectories: fall back to grep-first strategy.
+Split by top-level subdirectories. Before starting, ask the user:
+```
+Auto-decompose: N subdirectories detected.
+  1. Balanced (recommended) — budget split proportionally, 20 total reads. Cheaper.
+  2. Deep — 20 reads per subdirectory. Full depth, more expensive.
+Which mode? (1/2, default: 1)
+```
+Balanced: divide 20 proportionally (min 2 per subdir). Deep: 20 per subdir.
+Generate integration diagram at end. If < 2 subdirectories: fall back to grep-first strategy.
 
 ## PHASE 1.5 — Paradigm Detection
 
