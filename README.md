@@ -139,8 +139,8 @@ Each diagram adapts to the detected paradigm:
 When the budget is scaled down (100+ files or multi-path), add the `deep` flag for full depth:
 
 ```bash
-/code-diagram lib/features/payments deep          # 20 reads per subdirectory
-/code-diagram [lib/auth, lib/payments] deep        # 20 reads per target
+/code-diagram lib/features/payments high           # 25 reads, DI resolution
+/code-diagram [lib/auth, lib/payments] max         # exhaustive per target
 ```
 
 Without `deep`, balanced mode is used automatically (cheaper, proportional reads).

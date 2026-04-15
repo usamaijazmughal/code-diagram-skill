@@ -28,7 +28,7 @@ Also extract flags (can appear in any order in the user's request):
 If the target is a single file, check its extension: `.dart`, `.ts`, `.tsx`, `.js`, `.jsx`, `.py`, `.kt`, `.java`, `.go`, `.swift`, `.rs`, `.svelte`. If unsupported, tell the user: "Unsupported file type. Please point at a source code file or directory."
 
 ### Multi-path mode
-When multiple targets are provided, budget is from `BUDGET_MODE` flag: Balanced (default) = scaled reads per target. Deep = 20 per target.
+When multiple targets are provided, budget per target is from `EFFORT_LEVEL`: low=5, medium=15, high=25, max=unlimited.
 Process each target independently, then check for cross-path imports to draw connections between subgraphs.
 
 ### Line range mode
@@ -48,7 +48,7 @@ FLOW_MODE behavior per diagram type:
 
 ## Global read budget
 
-**MAX_FULL_READS = 20 per invocation.** Track how many files you fully read with `cat`. Grep (`rg`) is free — use it liberally. **Override:** In multi-path mode, the user's balanced/deep choice supersedes this limit.
+Budget is set by `EFFORT_LEVEL`: low=5, medium=15 (default), high=25, max=unlimited. Track reads with `cat`. Grep (`rg`) is always free.
 
 ## Discovery
 
@@ -67,8 +67,9 @@ Detect language from dominant extension. Count files per subdirectory.
 If zero files found: report and stop.
 
 ### Auto-decompose (100+ files)
-If 100+ files: split by top-level subdirectories.
-Budget from `BUDGET_MODE` flag: Balanced (default) = divide 20 proportionally (min 2 per subdir). Deep = 20 per subdir.
+If `max` effort: treat entire directory as ONE unit (no subdir split). Unlimited reads.
+Otherwise (low/medium/high): split by top-level subdirectories.
+Budget per subdir: low=proportional(5), medium=proportional(15), high=25 per subdir.
 Analyze each independently, generate integration diagram at the end.
 
 If fewer than 2 subdirectories: fall back to grep-first strategy for 50-99 file features.
@@ -236,6 +237,6 @@ Add **Key Insights** after diagrams:
 
 ## Guardrails
 - Never invent entities not found in code
-- Never exceed 20 file reads
+- Never exceed the effort level's read budget (low=5, medium=15, high=25, max=unlimited)
 - 30 nodes max per diagram — split if larger
 - Skip empty diagram types with explanation

@@ -20,7 +20,11 @@ Determine from the user's message:
 - Diagram type: `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
 - Flow mode: `full` (unified) or `split` (one per flow/layer) — default: `full`
 - Detail level: if user says "rich", "show endpoints", "with details" → rich mode. Otherwise → method-names (default, secure)
-- Effort: if user says "low" → quick shallow; "high" → DI resolution + abstract tracing; "max" → exhaustive, no limits. Default: medium
+- Effort level (default: medium):
+  - `low` → 5 reads, 3-hop trace, structure only
+  - `medium` → 15 reads, 8-hop trace
+  - `high` → 25 reads, 15-hop, DI resolution (GetIt/Hilt/Spring/NestJS), abstract→concrete, mixin tracking
+  - `max` → no read cap, unlimited trace, no auto-decompose split, full DI graph
 
 If the user doesn't specify, use defaults and proceed. No need to ask clarifying questions for these — just analyze.
 
@@ -151,4 +155,4 @@ Add **Key Insights** after diagrams:
 | 1 file | Focused analysis, note cross-file limitations |
 | 2-49 files | Full analysis |
 | 50-99 files | Prioritize foundational files, happy-path sequence only |
-| 100+ files | Auto-decompose by subdirectory, integration diagram at end. Balanced budget by default; deep if user requested "deep" or "full depth" |
+| 100+ files | If effort=`max`: treat as one unit, no split. Otherwise: auto-decompose by subdirectory, budget from effort level (low=5, medium=15, high=25) |

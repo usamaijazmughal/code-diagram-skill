@@ -26,6 +26,7 @@ Then parse remaining tokens (flags, any order):
   - `medium`: 15 reads, 8-hop trace
   - `high`: 25 reads, 15-hop trace, DI resolution, abstract→concrete, mixin tracking
   - `max`: no read cap, unlimited trace, full DI graph, no auto-decompose split
+- `deep` → alias for `high` (backward compatibility)
 
 FLOW_MODE behavior:
 
@@ -52,7 +53,7 @@ If input doesn't match any path pattern: grep project for the code. If found →
 
 ## Global read budget
 
-**MAX_FULL_READS = 20.** Shared pool. Use shell `cat` for reads, `rg` (ripgrep) for search. Grep is free; reads are expensive. **Override:** In multi-path mode, the user's balanced/deep choice supersedes this limit.
+Budget from `EFFORT_LEVEL`: low=5, medium=15 (default), high=25, max=unlimited. Use shell `cat` for reads, `rg` for search. Grep is free; reads are expensive.
 
 ## Discovery
 
@@ -199,6 +200,6 @@ Read budget from `EFFORT_LEVEL`: low=5, medium=15, high=25, max=unlimited.
 Bullet points: paradigm + confidence, entity count, external deps, read budget usage, hotspots, violations.
 
 ## Guardrails
-- Never invent entities. Never exceed 20 reads. 30 nodes max per diagram.
+- Never invent entities. Never exceed effort budget (low=5, medium=15, high=25, max=unlimited). 30 nodes max per diagram.
 - Never apply OOP patterns to component/functional codebases.
 - Skip empty diagrams with explanation.

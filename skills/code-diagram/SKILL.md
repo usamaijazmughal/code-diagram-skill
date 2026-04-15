@@ -956,7 +956,7 @@ After the diagrams, add a brief **Key Insights** section (bullet points, tailore
 - Paradigm detected and confidence level (e.g. "OOP — 20 class declarations, 2 abstract contracts, high confidence")
 - Total entities found and distribution across layers
 - External APIs/services the feature depends on
-- Read budget usage (e.g. "12 of 20 file reads used")
+- Read budget usage (e.g. "12 of 15 reads used (medium effort)" or "18 of 25 reads used (high effort)")
 
 **For OOP:**
 - Architectural layer violations spotted
