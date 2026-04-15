@@ -215,7 +215,7 @@ Not all phases apply to every input mode. Skipped phases are irrelevant for that
 | **2.5 — Scoring** | Tier 1/2/3 | Skip (1 file) | Skip (1 range) | Per item within budget | Skip |
 | **3 — Reading** | Budget-controlled | Read the 1 file | Read the range | Per item within budget | Already have content |
 | **4 — Diagrams** | All types | All types | All types | All types + cross-refs | All types |
-| **3.5 — Detail prompt** | If Pass 3 found ops | If Pass 3 found ops | If Pass 3 found ops | If any item has ops | If Pass 3 found ops |
+| **2.75 — Detail prompt** | If Pass 3 found ops | If Pass 3 found ops | If Pass 3 found ops | If any item has ops | If Pass 3 found ops |
 | **5 — Insights** | Full | Lite (no hotspots) | Lite (no hotspots) | Full + per-item + cross-refs | Lite (limited context) |
 
 **"Lite" insights** means: paradigm, entity count, and external deps are reported, but cross-file metrics (hotspots, violations, circular deps) cannot be computed from a single file/range.
@@ -672,6 +672,35 @@ TIER 3 (grep only):
 
 ---
 
+## PHASE 2.75 — Detail Level Prompt
+
+**This happens AFTER all grep passes (including Pass 3) but BEFORE any file reading.** The user's choice is needed before Phase 3 begins.
+
+When Pass 3 detects ANY external operations (HTTP endpoints, DB, cache, queue, etc.), ask the user ONCE:
+
+```
+External operations detected (HTTP endpoints, database, cache, ...).
+
+Detail level for ALL diagrams:
+  1. Method names only (recommended) — safe to share externally
+     Example: Repository->>PaymentDataSource: createPayment()
+
+  2. Rich details — shows endpoints, operations, targets (internal use)
+     Example: Repository->>API: POST /api/v1/payments
+     Example: Service->>DB: WRITE transactions
+
+Which level? (1/2, default: 1)
+```
+
+Default is **method names** (secure). Rich is opt-in for internal/trusted contexts.
+Only show this prompt when external operations are actually found in grep results. If Pass 3 found nothing, skip entirely.
+
+**For line-range and single-file modes:** Pass 3 patterns are checked against the file content during Phase 2 grep. If external operations are found, this prompt STILL fires before diagram generation.
+
+Store the user's choice as `DETAIL_LEVEL` (`method-names` or `rich`) and apply it in Phase 4 across all diagram types.
+
+---
+
 ## PHASE 3 — Diagram-Aware File Reading
 
 **Key principle:** Grep covers ALL files cheaply. Full reads are expensive and must be justified per diagram type. All reads draw from the shared MAX_FULL_READS = 20 budget.
@@ -715,31 +744,6 @@ Read Tier 1 files + sequence chain-trace files. Component and arch diagrams are 
 | **Line range** | — | Read the range only, focused diagrams |
 | **Multi-path** | Per item | Each item follows its own scale rule based on its type and size |
 | **Pasted code** | — | Analyze in isolation or resolve to line-range if found in project |
-
----
-
-## PHASE 3.5 — Detail Level Prompt
-
-When Pass 3 detects ANY external operations (HTTP endpoints, DB, cache, queue, etc.), ask the user ONCE before generating diagrams:
-
-```
-External operations detected (HTTP endpoints, database, cache, ...).
-
-Detail level for ALL diagrams:
-  1. Method names only (recommended) — safe to share externally
-     Example: Repository->>PaymentDataSource: createPayment()
-
-  2. Rich details — shows endpoints, operations, targets (internal use)
-     Example: Repository->>API: POST /api/v1/payments
-     Example: Service->>DB: WRITE transactions
-
-Which level? (1/2, default: 1)
-```
-
-Default is **method names** (secure). Rich is opt-in for internal/trusted contexts.
-Only show this prompt when external operations are actually found. If Pass 3 found nothing, skip entirely.
-
-Store the user's choice as `DETAIL_LEVEL` (`method-names` or `rich`) and apply it in Phase 4 across all diagram types.
 
 ---
 
