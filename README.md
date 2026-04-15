@@ -160,6 +160,50 @@ Discovery  ->  Paradigm  ->  Grep Scan  ->  Scoring  ->  Reading  ->  Diagrams  
 
 ---
 
+## Cost Benchmarking
+
+The skill is designed to minimize token usage. You can verify this yourself.
+
+### Test matrix
+
+Run these on the same directory, from cheapest to most expensive:
+
+```bash
+/code-diagram lib/features/payments component          # zero reads (grep only)
+/code-diagram lib/features/payments arch               # zero reads (grep only)
+/code-diagram lib/features/payments class              # 3-8 reads
+/code-diagram lib/features/payments sequence           # 5-12 reads
+/code-diagram lib/features/payments all                # 8-18 reads
+/code-diagram lib/features/payments all rich           # same reads, richer labels
+/code-diagram lib/features/payments all rich deep      # max reads (for 100+ files)
+```
+
+### Expected read counts
+
+| Diagram type | Expected reads | If higher, investigate |
+|---|---|---|
+| `component` | **0** | Any reads = wasted |
+| `arch` | **0** | Any reads = wasted |
+| `class` | 3–8 | Above 10 = over-reading |
+| `sequence` | 5–12 | Above 15 = reading sideways |
+| `all` | 8–18 | Hitting 20 = budget pressure |
+
+### Where to find cost data
+
+Every run reports read budget usage in the **Insights** section at the end:
+```
+Read budget usage: 12 of 20 file reads used
+```
+
+### Red flags
+
+- `component` or `arch` triggering file reads (should be zero)
+- Sequence chain reading sibling files not in the call chain
+- Hitting 20/20 reads on a feature under 50 files
+- `rich` flag increasing read count (it shouldn't — `rich` only changes labels, not reads)
+
+---
+
 ## Updating
 
 ### Claude Code (marketplace)
