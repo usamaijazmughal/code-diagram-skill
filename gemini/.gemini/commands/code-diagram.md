@@ -162,7 +162,7 @@ When external operations detected, ask once:
   2. Rich details — endpoints, operations, targets (internal use)
 Which? (1/2, default: 1)
 ```
-Rich: full endpoints, `READ/WRITE entity` for DB (no query text), compact ops for cache/queue/auth.
+Rich: full endpoints, `READ/WRITE entity` for DB. **DB security: never show query text, column names, filters, or schema.** Compact ops for cache/queue/auth/analytics/push.
 Method-names: identical to v1.0.1.
 Applies to ALL diagram types.
 

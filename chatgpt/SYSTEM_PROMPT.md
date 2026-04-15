@@ -66,6 +66,32 @@ Foundational files (read most carefully) — any of:
 
 Barrel files (`index.ts` with only re-exports) are NOT foundational.
 
+### Step 3.5 — Detect external operations
+
+Look for these 9 categories in the code:
+- **HTTP:** endpoint URLs, fetch/axios/dio/retrofit calls
+- **Database:** ORM calls (prisma, mongoose, JPA, GORM, SQLAlchemy), raw SQL
+- **Cache:** Redis, SharedPreferences, localStorage, UserDefaults
+- **Storage:** S3, filesystem writes, file uploads
+- **Message Queue:** Kafka, RabbitMQ, SQS, EventBus
+- **WebSocket:** socket.io, WebSocket connections
+- **Auth:** JWT, Firebase Auth, passport, OAuth
+- **Analytics:** track(), logEvent(), mixpanel, amplitude
+- **Push Notifications:** FCM, OneSignal, APNs
+
+### Step 3.75 — Detail Level Prompt
+
+**Ask this BEFORE generating any diagrams.** When external operations are detected, ask the user:
+```
+Detail level for ALL diagrams:
+  1. Method names only (recommended) — safe to share externally
+  2. Rich details — endpoints, operations, targets (internal use)
+```
+Default: method names. Rich mode shows:
+- HTTP: full endpoint paths, never truncated
+- DB: operation type + entity name only (`READ users`, `WRITE transactions`). **Never show query text, column names, filters, or schema.**
+- Cache/Queue/WS/Auth/Analytics/Push: compact operation + target (`GET user session`, `PUBLISH payment.completed`)
+
 ### Step 4 — Generate diagrams
 
 **Start every Mermaid diagram with:**
@@ -103,17 +129,6 @@ Add **Key Insights** after diagrams:
 - External APIs/services
 - Hotspots (most-depended-on entities)
 - Architectural violations or circular dependencies
-
-## Detail Level
-
-When you detect external operations (HTTP endpoints, DB calls, cache, queue, etc.), ask the user:
-```
-Detail level for ALL diagrams:
-  1. Method names only (recommended) — safe to share
-  2. Rich details — endpoints, operations, targets (internal use)
-```
-Default: method names. Rich: full endpoint paths, `READ/WRITE entity` for DB (no query text ever), compact operations for cache/queue/auth/analytics.
-DB security: never show query text, column names, or schema in any mode.
 
 ## Output rules
 
