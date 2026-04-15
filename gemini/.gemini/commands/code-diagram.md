@@ -21,7 +21,7 @@ Then parse remaining tokens (flags, any order):
 - `DIAGRAM_TYPE`: `class`, `sequence`, `component`, `arch`, `all` (default: `all`)
 - `FLOW_MODE`: `full` or `split` (default: `full`)
 - `rich` → `DETAIL_LEVEL` = rich (show endpoints, operations). Default: method-names (secure)
-- `low`, `medium`, `high`, `max` → `EFFORT_LEVEL`. Default: `medium`
+- `low`, `medium`, `high`, `max` or `effort=VALUE` → `EFFORT_LEVEL`. Default: `medium`
   - `low`: 5 reads, 3-hop trace
   - `medium`: 15 reads, 8-hop trace
   - `high`: 25 reads, 15-hop trace, DI resolution, abstract→concrete, mixin tracking

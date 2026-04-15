@@ -20,7 +20,7 @@ Determine from the user's message:
 - Diagram type: `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
 - Flow mode: `full` (unified) or `split` (one per flow/layer) — default: `full`
 - Detail level: if user says "rich", "show endpoints", "with details" → rich mode. Otherwise → method-names (default, secure)
-- Effort level (default: medium):
+- Effort level (default: medium). User may say "effort=high" or just "high":
   - `low` → 5 reads, 3-hop trace, structure only
   - `medium` → 15 reads, 8-hop trace
   - `high` → 25 reads, 15-hop, DI resolution (GetIt/Hilt/Spring/NestJS), abstract→concrete, mixin tracking

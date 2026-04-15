@@ -18,7 +18,7 @@ Also extract flags (can appear in any order in the user's request):
 - `DIAGRAM_TYPE` — `class`, `sequence`, `component`, `arch`, or `all` (default: `all`)
 - `FLOW_MODE` — `full` or `split` (default: `full`)
 - `DETAIL_LEVEL` — if user says "rich" or "with details" or "show endpoints" → `rich`. Otherwise → `method-names` (default, secure)
-- `EFFORT_LEVEL` — `low`, `medium` (default), `high`, or `max`
+- `EFFORT_LEVEL` — `low`, `medium` (default), `high`, `max`, or `effort=VALUE` (explicit form)
   - `low`: 5 reads, 3-hop trace, structure only
   - `medium`: 15 reads, 8-hop trace (default)
   - `high`: 25 reads, 15-hop trace, DI resolution, abstract→concrete, mixin tracking

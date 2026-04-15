@@ -2,7 +2,7 @@
 name: code-diagram
 version: 1.1.0
 description: Analyzes source code and generates Mermaid diagrams. Accepts a directory, file, @reference, line range (path:10-50), multiple targets ([path1, path2]), or pasted code. Supports class, sequence, component, and architecture diagrams for Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust.
-argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split] [rich] [low|medium|high|max]"
+argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split] [rich] [effort=low|medium|high|max]"
 allowed-tools: Glob Grep Read
 ---
 
@@ -32,6 +32,7 @@ After extracting the input, scan ALL remaining tokens. Each token is matched ind
 - `full` or `split` → `FLOW_MODE`. Default: `full`
 - `rich` → `DETAIL_LEVEL` = `rich` (show endpoints, operations, targets)
 - `low`, `medium`, `high`, or `max` → `EFFORT_LEVEL`. Default: `medium`
+- `effort=low`, `effort=medium`, `effort=high`, or `effort=max` → same as above (explicit form)
 - `deep` → treated as alias for `high` (backward compatibility)
 
 If a token doesn't match any of the above → validation error.
@@ -61,9 +62,11 @@ If a token doesn't match any of the above → validation error.
 /code-diagram [lib/auth, lib/payments] sequence           # multi-path, sequence only
 /code-diagram lib/app sequence split                     # split mode
 /code-diagram lib/app sequence rich                      # rich details (endpoints, operations)
-/code-diagram lib/app sequence high                      # DI resolution + abstract tracing
-/code-diagram lib/app sequence max rich                  # exhaustive + show endpoints
-/code-diagram [lib/auth, lib/payments] high              # multi-path, 25 reads per target
+# Effort — both forms work:
+/code-diagram lib/app sequence high                      # shorthand
+/code-diagram lib/app sequence effort=high               # explicit (self-documenting)
+/code-diagram lib/app sequence effort=max rich           # exhaustive + show endpoints
+/code-diagram [lib/auth, lib/payments] effort=high       # multi-path, 25 reads per target
 ```
 
 ### FLOW_MODE behavior per diagram type

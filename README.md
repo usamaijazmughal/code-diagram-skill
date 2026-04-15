@@ -52,9 +52,10 @@ Restart your tool after installing. For Claude Code, type `/code-diagram` and it
 /code-diagram lib/auth/bloc.dart:10-50 class             # line range
 /code-diagram [lib/auth, lib/payments] sequence           # multiple targets
 /code-diagram lib/app sequence rich                      # show endpoints + operations
-/code-diagram lib/app sequence high                      # DI resolution + abstract tracing
-/code-diagram lib/app sequence max rich                  # exhaustive + endpoints
-/code-diagram [lib/auth, lib/payments] high              # 25 reads per target
+/code-diagram lib/app sequence high                      # shorthand
+/code-diagram lib/app sequence effort=high               # explicit (self-documenting)
+/code-diagram lib/app sequence effort=max rich           # exhaustive + endpoints
+/code-diagram [lib/auth, lib/payments] effort=high       # 25 reads per target
 ```
 
 | Input mode | When to use |
