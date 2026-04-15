@@ -141,9 +141,9 @@ Each diagram adapts to the detected paradigm:
 Use effort levels to control depth. Default is `medium` (cheap, good for most cases):
 
 ```bash
-/code-diagram lib/features/payments effort=max     # unlimited reads, no auto-decompose split
-/code-diagram lib/features/payments max            # no cap, treats as one unit, full DI graph
-/code-diagram [lib/auth, lib/payments] max         # exhaustive per target
+/code-diagram lib/features/payments max                # unlimited reads, no auto-decompose split
+/code-diagram lib/features/payments effort=max rich    # exhaustive + show endpoints
+/code-diagram [lib/auth, lib/payments] effort=max      # exhaustive per target
 ```
 
 ---
