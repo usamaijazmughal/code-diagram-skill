@@ -136,7 +136,14 @@ If the extension is valid:
 
 **Read budget (determined by `BUDGET_MODE` flag):**
 
-**Balanced (default — no `deep` flag):**
+**Check `BUDGET_MODE` FIRST before allocating any reads:**
+
+**If `BUDGET_MODE` = `deep`:**
+→ Each item gets **20 reads**. Period. Do NOT use the balanced table.
+→ Example: 3 items = 60 total reads. This is intentional.
+→ Print: `"Multi-path mode: N targets. Budget: deep (20 per target, M total)"`
+
+**If `BUDGET_MODE` = `balanced` (default):**
 
 | List size | Budget per item | Total max |
 |---|---|---|
@@ -145,9 +152,7 @@ If the extension is valid:
 | 4-5 items | 10 each | 40-50 |
 | 6+ items | 8 each | 48+ |
 
-**Deep (when `deep` flag is present):** 20 reads per item regardless of list size.
-
-Print at start: `"Multi-path mode: N targets. Budget: balanced (X per target)" or "... deep (20 per target)"`
+→ Print: `"Multi-path mode: N targets. Budget: balanced (X per target, Y total)"`
 Single-file and line-range items count as 1 read each and are not affected by budget mode.
 
 **Auto-decompose within multi-path:** If a directory item in the list has 100+ files, auto-decompose triggers for that item. The item's allocated budget (e.g. 15 in balanced) is divided across its subdirectories using auto-decompose's proportional logic. Example: payments/ has 150 files and gets 15 reads → data/ gets 4, domain/ gets 3, presentation/ gets 6, di/ gets 2.
@@ -270,11 +275,16 @@ If the total source file count is **100 or more**, do NOT attempt to analyze the
 
 4. **Read budget (determined by `BUDGET_MODE` flag):**
 
-   **Balanced (default):** `floor(20 × subdir_files / total_files)` per subdirectory, minimum 2 each. Total must not exceed 20.
+   **Check `BUDGET_MODE` FIRST before allocating any reads:**
 
-   **Deep (when `deep` flag is present):** 20 reads per subdirectory regardless of count.
+   **If `BUDGET_MODE` = `deep`:**
+   → Each subdirectory gets **20 reads**. Period. Do NOT divide proportionally.
+   → Example: 4 subdirectories = 80 total reads. This is intentional — the user chose depth over cost.
+   → Print: `"Auto-decompose: N subdirectories. Budget: deep (20 per subdir, M total)"`
 
-   Print at start: `"Auto-decompose: N subdirectories. Budget: balanced (20 total)" or "... deep (20 per subdir)"`
+   **If `BUDGET_MODE` = `balanced` (default):**
+   → `floor(20 × subdir_files / total_files)` per subdirectory, minimum 2 each. Total must not exceed 20.
+   → Print: `"Auto-decompose: N subdirectories. Budget: balanced (20 total)"`
 
 5. Process **each subdirectory independently** — run Phases 1.5 through 4 separately per subdirectory. Each subdirectory gets its own:
    - Read budget from the user's choice above
