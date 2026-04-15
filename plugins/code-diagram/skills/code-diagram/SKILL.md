@@ -1,5 +1,6 @@
 ---
 name: code-diagram
+version: 1.0.1
 description: Analyzes source code and generates Mermaid diagrams. Accepts a directory, file, @reference, line range (path:10-50), multiple targets ([path1, path2]), or pasted code. Supports class, sequence, component, and architecture diagrams for Dart, TypeScript, Python, Java, Kotlin, Go, Swift, Rust.
 argument-hint: "<path|[paths]|path:from-to|code> [class|sequence|component|arch|all] [full|split]"
 allowed-tools: Glob Grep Read

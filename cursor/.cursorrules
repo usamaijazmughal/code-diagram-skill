@@ -1,4 +1,4 @@
-# Code Diagram Generator
+# Code Diagram Generator v1.0.1
 
 When the user asks you to generate diagrams, analyze code structure, or visualize architecture, follow this analysis pipeline. Use terminal commands (`rg`, `find`, `cat`) for all file operations.
 

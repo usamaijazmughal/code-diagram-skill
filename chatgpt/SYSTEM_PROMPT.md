@@ -1,4 +1,4 @@
-# Code Diagram Generator — ChatGPT System Prompt
+# Code Diagram Generator v1.0.1 — ChatGPT System Prompt
 
 > **How to use:** Copy the content below the line into ChatGPT's "Custom Instructions" or paste it at the start of a conversation. Then ask: "Analyze this codebase and generate diagrams" along with a zip upload or pasted code.
 
