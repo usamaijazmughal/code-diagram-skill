@@ -215,6 +215,7 @@ Not all phases apply to every input mode. Skipped phases are irrelevant for that
 | **2.5 — Scoring** | Tier 1/2/3 | Skip (1 file) | Skip (1 range) | Per item within budget | Skip |
 | **3 — Reading** | Budget-controlled | Read the 1 file | Read the range | Per item within budget | Already have content |
 | **4 — Diagrams** | All types | All types | All types | All types + cross-refs | All types |
+| **3.5 — Detail prompt** | If Pass 3 found ops | If Pass 3 found ops | If Pass 3 found ops | If any item has ops | If Pass 3 found ops |
 | **5 — Insights** | Full | Lite (no hotspots) | Lite (no hotspots) | Full + per-item + cross-refs | Lite (limited context) |
 
 **"Lite" insights** means: paradigm, entity count, and external deps are reported, but cross-file metrics (hotspots, violations, circular deps) cannot be computed from a single file/range.
@@ -559,8 +560,6 @@ Relative imports (internal dependencies):
 - **Function list**: names + file + exported or not
 - **Module dependency graph**: from import patterns
 - **Route map**: HTTP endpoints → handler functions
-
----
 
 ---
 
