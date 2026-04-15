@@ -131,19 +131,18 @@ Each diagram adapts to the detected paradigm:
 | Size | Strategy |
 |---|---|
 | **1 file** | Read directly, focused diagram |
-| **2-49 files** | Full analysis, 20-file read budget |
+| **2-49 files** | Full analysis, up to 15 reads (medium effort) |
 | **50-99 files** | Grep-first, happy-path sequence only |
 | **100+ files** | Auto-decompose by subdirectory + integration diagram |
-| **Multi-path** | Per-item budget, cross-path relationship detection |
+| **Multi-path** | Per-item budget from effort level, cross-path relationship detection |
 
-When the budget is scaled down (100+ files or multi-path), add the `deep` flag for full depth:
+Use effort levels to control depth. Default is `medium` (cheap, good for most cases):
 
 ```bash
-/code-diagram lib/features/payments high           # 25 reads, DI resolution
+/code-diagram lib/features/payments high           # 25 reads, DI resolution + abstract tracing
+/code-diagram lib/features/payments max            # no cap, treats as one unit, full DI graph
 /code-diagram [lib/auth, lib/payments] max         # exhaustive per target
 ```
-
-Without `deep`, balanced mode is used automatically (cheaper, proportional reads).
 
 ---
 
@@ -151,14 +150,14 @@ Without `deep`, balanced mode is used automatically (cheaper, proportional reads
 
 ```
 Discovery  ->  Paradigm  ->  Grep Scan  ->  Scoring  ->  Reading  ->  Diagrams  ->  Insights
- (Glob)       (3 probes)    (2 passes)    (Tier 1/2/3)  (max 20)    (dark theme)   (hotspots)
+ (Glob)       (3 probes)    (2 passes)    (Tier 1/2/3)  (effort)    (dark theme)   (hotspots)
 ```
 
 1. **Glob** all source files, exclude noise (tests, generated, i18n)
 2. **3 grep probes** classify paradigm: OOP / Component / Functional / Mixed
 3. **2 batched grep passes** per language extract classes, relationships, HTTP calls, imports, DI
 4. **Tier scoring** identifies foundational files using structural signals (not naming)
-5. **Selective reading** — only files that grep can't explain (max 20). Component + arch diagrams need **zero reads**
+5. **Selective reading** — only files that grep can't explain (5–25 reads based on effort, unlimited at `max`). Component + arch diagrams need **zero reads**
 6. **Mermaid output** with dark theme, 30-node cap, `rect` flow separation
 7. **Insights** — hotspots, violations, external deps, budget usage
 
@@ -191,20 +190,20 @@ Run these on the same directory, from cheapest to most expensive:
 | `arch` | **0** | Any reads = wasted |
 | `class` | 3–8 | Above 10 = over-reading |
 | `sequence` | 5–12 | Above 15 = reading sideways |
-| `all` | 8–18 | Hitting 20 = budget pressure |
+| `all` (medium) | 8–15 | Above 15 = budget pressure at medium effort |
 
 ### Where to find cost data
 
 Every run reports read budget usage in the **Insights** section at the end:
 ```
-Read budget usage: 12 of 20 file reads used
+Read budget usage: 12 of 15 reads used (medium effort)
 ```
 
 ### Red flags
 
 - `component` or `arch` triggering file reads (should be zero)
 - Sequence chain reading sibling files not in the call chain
-- Hitting 20/20 reads on a feature under 50 files
+- Hitting the budget cap (15 at medium, 25 at high) on a feature under 30 files
 - `rich` flag increasing read count (it shouldn't — `rich` only changes labels, not reads)
 - `medium` effort using more than 15 reads
 - `high` effort not resolving abstract→concrete (DI binding should be checked)
@@ -267,7 +266,7 @@ Current version: **1.1.0**
 
 <details>
 <summary><b>Does it read every file?</b></summary>
-No. It greps all files (cheap) and only reads the most important 10-20. Component and architecture diagrams need zero reads.
+No. It greps all files (cheap) and only reads the most important files. At default (`medium`): up to 15 reads. At `high`: up to 25. At `max`: unlimited but traces only what's in the call chain. Component and architecture diagrams need zero reads.
 </details>
 
 <details>
